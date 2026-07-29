@@ -1,4 +1,6 @@
-import { useState } from "react"; // ✅ Only import useState since useEffect is not used
+// src/components/dashboard/SaleModal.tsx
+
+import { useState } from "react";
 import { MdClose, MdShoppingCart, MdAttachMoney, MdWarehouse } from "react-icons/md";
 import { Product } from "../../types";
 
@@ -7,6 +9,7 @@ interface SaleModalProps {
   companyId: string;
   warehouseId: string;
   warehouseName: string;
+  availableStock: number;
   onClose: () => void;
   onSaleComplete: () => void;
 }
@@ -38,6 +41,7 @@ export const SaleModal = ({
   companyId, 
   warehouseId,
   warehouseName,
+  availableStock,
   onClose, 
   onSaleComplete 
 }: SaleModalProps) => {
@@ -51,8 +55,7 @@ export const SaleModal = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // ✅ Use product.product_Qty directly instead of state
-  const maxQuantity = product.product_Qty || 0;
+  const maxQuantity = availableStock;
 
   const subtotal = saleData.quantity * saleData.price;
   const discountAmount = (subtotal * (saleData.discount || 0)) / 100;
@@ -110,6 +113,31 @@ export const SaleModal = ({
     }
   };
 
+  // ✅ Handle quantity change - allow empty input
+  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    
+    // Allow empty input (user is typing)
+    if (raw === "") {
+      setSaleData(prev => ({ ...prev, quantity: 0 })); // Set to 0 temporarily
+      return;
+    }
+    
+    const parsed = Number(raw);
+    if (isNaN(parsed)) return;
+    
+    // Clamp between 1 and maxQuantity
+    const clamped = Math.min(Math.max(1, parsed), maxQuantity || 1);
+    setSaleData(prev => ({ ...prev, quantity: clamped }));
+  };
+
+  // ✅ Handle blur - ensure valid value
+  const handleQuantityBlur = () => {
+    if (saleData.quantity < 1) {
+      setSaleData(prev => ({ ...prev, quantity: 1 }));
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-lg rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
@@ -160,6 +188,9 @@ export const SaleModal = ({
             <span style={{ color: "var(--color-text-secondary)" }}>
               Selling from: <strong style={{ color: "var(--color-text-primary)" }}>{warehouseName}</strong>
             </span>
+            <span className="ml-auto text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+              Stock: {maxQuantity} units
+            </span>
           </div>
 
           {/* Quantity & Price */}
@@ -172,8 +203,9 @@ export const SaleModal = ({
                 type="number"
                 min={1}
                 max={maxQuantity}
-                value={saleData.quantity}
-                onChange={(e) => setSaleData(prev => ({ ...prev, quantity: Math.max(1, Number(e.target.value)) }))}
+                value={saleData.quantity === 0 ? "" : saleData.quantity} // ✅ Show empty when 0
+                onChange={handleQuantityChange} // ✅ Use new handler
+                onBlur={handleQuantityBlur} // ✅ Fix on blur
                 required
                 style={S}
               />

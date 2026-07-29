@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useLocation } from "react-router-dom";
+import { Notification } from "../services/notification.service";
 import {
   MdDashboard, MdPeople, MdCreditCard,
   MdWarehouse, MdCategory, MdInventory2,
@@ -36,13 +37,15 @@ import {
 import DashboardSidebar from "../components/dashboard/DashboardSidebar";
 import DashboardHeader  from "../components/dashboard/DashboardHeader";
 import AddProductView   from "../components/dashboard/AddProductView";
-import StockStateEditor from "../components/dashboard/StockStateEditor";
+
 import {
   StatCard, InventoryTurnoverChart, CategoryDonutChart,
   LowStockPanel, RecentActivityPanel, ProductsTable,
 } from "../components/dashboard/DashboardWidgets";
 import { QueryDocumentSnapshot } from "firebase/firestore";
 import { SaleModal } from "../components/dashboard/SaleModal";
+import { OrderModal } from "../components/dashboard/OrderModal";
+import { StockStateEditor } from "../components/dashboard/StockStateEditor";
 
 type OTab = "dashboard" | "staff" | "warehouses" | "categories" | "transfers" | "movements" | "plan" | "notifications";
 type DView = "dashboard"|"add-product";
@@ -289,29 +292,32 @@ const OwnerDashboardPage = () => {
   const [transferPageSize] = useState(10);
   const [transferTotalCount, setTransferTotalCount] = useState(0);
   const [transferHasMore, setTransferHasMore] = useState(false);
-  const [transferLastVisible, setTransferLastVisible] = useState<any>(null);
+  const [transferLastVisible, setTransferLastVisible] = useState<QueryDocumentSnapshot | null>(null);
   const [transferStatusFilter, setTransferStatusFilter] = useState<string>("all");
   const [transferLoadingMore, setTransferLoadingMore] = useState(false);
   const [allTransfersLoaded, setAllTransfersLoaded] = useState(false);
 
 
   // Notifications state
-const [notifications, setNotifications] = useState<any[]>([]);
+const [notifications, setNotifications] = useState<Notification[]>([]);
 const [notificationsLoading, setNotificationsLoading] = useState(false);
 const [notificationPageSize] = useState(20);
 const [notificationHasMore, setNotificationHasMore] = useState(false);
-const [notificationLastVisible, setNotificationLastVisible] = useState<any>(null);
+const [notificationLastVisible, setNotificationLastVisible] = useState<QueryDocumentSnapshot | null>(null);
 const [notificationLoadingMore, setNotificationLoadingMore] = useState(false);
 const [allNotificationsLoaded, setAllNotificationsLoaded] = useState(false);
 const [selectedProductForSale, setSelectedProductForSale] = useState<{
   product: Product;
   warehouseId: string;
   warehouseName: string;
+  availableStock: number;
 } | null>(null);
   // Notification state
   const [notificationCount, setNotificationCount] = useState(0);
 
-
+// Add this with other state declarations
+const [pendingOrders, setPendingOrders] = useState(0);
+const [showOrderModal, setShowOrderModal] = useState(false);
 
 
   // Refs to prevent infinite loops
@@ -370,8 +376,15 @@ const [selectedProductForSale, setSelectedProductForSale] = useState<{
   const totalValue = displayedProducts.reduce((a,p)=>a+((p.stockQuantity ?? p.product_Qty ?? 0)*(p.price ?? p.product_Price ?? 0)),0);
   const totalStock = displayedProducts.reduce((a,p)=>a+(p.stockQuantity ?? p.product_Qty ?? 0),0);
   const outOfStock = displayedProducts.filter(p=>(p.stockQuantity ?? p.product_Qty ?? 0)===0).length;
-  const lowStock   = displayedProducts.filter(p=>((p.stockQuantity ?? p.product_Qty ?? 0)>0)&&((p.stockQuantity ?? p.product_Qty ?? 0)<=10)).length;
-  const editItem   = products.find(p=>p.id===editId);
+  // Get warehouse-specific stock for the product being edited
+  // Get warehouse-specific stock for the product being edited
+const editItem = products.find(p => p.id === editId);
+const editItemWarehouseStock = editItem ? 
+  (warehouseInventory[previewWarehouseId]?.find(i => i.productId === editItem.id)?.quantity ?? editItem.stockQuantity ?? 0) 
+  : 0;
+
+const currentWarehouse = warehouses.find(w => w.id === previewWarehouseId);
+const currentWarehouseName = currentWarehouse?.name || previewWarehouseId;
 
   // Load notifications with less frequency
 const loadNotifications = useCallback(async (cid = companyId) => {
@@ -455,7 +468,107 @@ const loadNotifications = useCallback(async (cid = companyId) => {
     }
   }, [companyId]);
 
-  const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
+  
+
+ // ============================================================
+// SALE HANDLERS
+// ============================================================
+const handleSellProduct = (product: Product) => {
+  // ✅ Check if user is staff with warehouse scope
+  if (hasWarehouseScope && assignedWarehouseId) {
+    // Staff can ONLY sell from their assigned warehouse
+    const currentWarehouseId = previewWarehouseId;
+    
+    // If the current preview warehouse is not the assigned warehouse, block the sale
+    if (currentWarehouseId !== assignedWarehouseId) {
+      const assignedWarehouse = warehouses.find(w => w.id === assignedWarehouseId);
+      alert(`You can only sell products from your assigned warehouse: "${assignedWarehouse?.name || assignedWarehouseId}". Please switch to your warehouse.`);
+      return;
+    }
+  }
+  
+  // Get the current warehouse where the product is being viewed
+  const warehouseId = previewWarehouseId;
+  const warehouse = warehouses.find(w => w.id === warehouseId);
+  const warehouseName = warehouse?.name || warehouseId;
+  
+  // Get stock for this specific warehouse
+  const inventoryItems = warehouseInventory[warehouseId] || [];
+  const inventoryItem = inventoryItems.find((i: InventoryRecord) => i.productId === product.id);
+  const stockInWarehouse = inventoryItem?.quantity || 0;
+  
+  if (stockInWarehouse <= 0) {
+    alert(`This product is out of stock in "${warehouseName}".`);
+    return;
+  }
+  
+  setSelectedProductForSale({
+    product,
+    warehouseId,
+    warehouseName,
+    availableStock: stockInWarehouse,
+  });
+};
+
+  const loadNotificationsList = useCallback(async (cid = companyId, loadMore = false) => {
+  if (!cid) return;
+  
+  if (loadMore) {
+    setNotificationLoadingMore(true);
+  } else {
+    setNotificationsLoading(true);
+    setAllNotificationsLoaded(false);
+  }
+  
+  try {
+    const lastDoc = loadMore ? notificationLastVisible : null;
+    const result = await NotificationService.list(
+      cid,
+      notificationPageSize,
+      lastDoc,
+      'all'
+    );
+
+    if (loadMore) {
+      setNotifications(prev => [...prev, ...result.notifications]);
+    } else {
+      setNotifications(result.notifications);
+    }
+
+    setNotificationHasMore(result.hasMore);
+    setNotificationLastVisible(result.lastVisible);
+    setAllNotificationsLoaded(!result.hasMore);
+  } catch (error) {
+    console.error("Failed to load notifications:", error);
+  } finally {
+    if (loadMore) {
+      setNotificationLoadingMore(false);
+    } else {
+      setNotificationsLoading(false);
+    }
+  }
+}, [companyId, notificationPageSize, notificationLastVisible]);
+
+ // ============================================================
+  // LOADPENDINGORDER FUNCTION
+  // ============================================================
+
+const loadPendingOrders = useCallback(async (cid = companyId) => {
+  if (!cid) return;
+  try {
+    const { OrderService } = await import("../services/order.service");
+    // Get pending orders count for the current warehouse
+    const count = await OrderService.getPendingCount(cid, previewWarehouseId);
+    setPendingOrders(count);
+  } catch (error) {
+    console.error("Failed to load pending orders:", error);
+  }
+}, [companyId, previewWarehouseId]);
+
+ // ============================================================
+  // LOADTRANSFER FUNCTION
+  // ============================================================
+const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
   if (isLoadingRef.current) return;
   isLoadingRef.current = true;
   
@@ -516,7 +629,11 @@ const loadNotifications = useCallback(async (cid = companyId) => {
   }
 }, [companyId, transferPageSize, transferLastVisible, transferStatusFilter, hasWarehouseScope, assignedWarehouseId]);
 
-  const loadMovements = useCallback(async (cid = companyId, loadMore = false) => {
+ // ============================================================
+  // LOADMOVEMENTS FUNCTION
+  // ============================================================
+
+ const loadMovements = useCallback(async (cid = companyId, loadMore = false) => {
     if (isLoadingRef.current) return;
     isLoadingRef.current = true;
     
@@ -562,68 +679,6 @@ const loadNotifications = useCallback(async (cid = companyId) => {
 
 
 
- // ============================================================
-// SALE HANDLERS
-// ============================================================
-const handleSellProduct = (product: Product) => {
-  // Check if product has stock
-  if ((product.product_Qty || 0) <= 0) {
-    alert("This product is out of stock and cannot be sold.");
-    return;
-  }
-  
-  // Get the current warehouse where the product is being viewed
-  const warehouseId = previewWarehouseId;
-  const warehouse = warehouses.find(w => w.id === warehouseId);
-  const warehouseName = warehouse?.name || warehouseId;
-  
-  setSelectedProductForSale({
-    product,
-    warehouseId,
-    warehouseName,
-  });
-};
-
-  const loadNotificationsList = useCallback(async (cid = companyId, loadMore = false) => {
-  if (!cid) return;
-  
-  if (loadMore) {
-    setNotificationLoadingMore(true);
-  } else {
-    setNotificationsLoading(true);
-    setAllNotificationsLoaded(false);
-  }
-  
-  try {
-    const lastDoc = loadMore ? notificationLastVisible : null;
-    const result = await NotificationService.list(
-      cid,
-      notificationPageSize,
-      lastDoc,
-      'all'
-    );
-
-    if (loadMore) {
-      setNotifications(prev => [...prev, ...result.notifications]);
-    } else {
-      setNotifications(result.notifications);
-    }
-
-    setNotificationHasMore(result.hasMore);
-    setNotificationLastVisible(result.lastVisible);
-    setAllNotificationsLoaded(!result.hasMore);
-  } catch (error) {
-    console.error("Failed to load notifications:", error);
-  } finally {
-    if (loadMore) {
-      setNotificationLoadingMore(false);
-    } else {
-      setNotificationsLoading(false);
-    }
-  }
-}, [companyId, notificationPageSize, notificationLastVisible]);
-
-
   // ============================================================
   // REFRESH ALL DATA FUNCTION
   // ============================================================
@@ -660,7 +715,6 @@ const handleSellProduct = (product: Product) => {
   }, [companyId, loadWarehouses, loadTransfers, loadMovements, loadNotifications, loadNotificationsList, oTab, previewWarehouseId]);
 
 
-
 const markNotificationAsRead = async (notificationId: string) => {
   try {
     await NotificationService.markAsRead(companyId, notificationId);
@@ -690,6 +744,7 @@ const markAllNotificationsAsRead = async () => {
     console.error("Failed to mark all notifications as read:", error);
   }
 };
+
 
 
   const toDate = (timestamp: Date | FirebaseTimestamp | undefined): Date => {
@@ -731,23 +786,17 @@ const getTimeAgo = (date: Date): string => {
   if (oTab === "staff") loadStaff();
   if (oTab === "warehouses") loadWarehouses();
   if (oTab === "categories") loadCategories();
-  if (oTab === "transfers") {
-    loadTransfers();
-  }
-  if (oTab === "movements") {
-    loadMovements();
-  }
+  if (oTab === "transfers") loadTransfers();
+  if (oTab === "movements") loadMovements();
   if (oTab === "notifications") {
-    // ✅ Force reload notifications when tab is opened
     setNotificationLastVisible(null);
     setAllNotificationsLoaded(false);
     loadNotificationsList(companyId, false);
   }
   
-  // Always load notification count
   loadNotifications();
+  loadPendingOrders(); // ✅ Add this
   
-  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [oTab, companyId]);
 
   useEffect(() => {
@@ -1044,9 +1093,18 @@ const getTimeAgo = (date: Date): string => {
                       Product Preview Scope
                     </p>
                     <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                      {hasWarehouseScope && assignedWarehouseId
-                        ? "Showing only the assigned warehouse"
-                        : "Switch between warehouses to preview that warehouse’s products"}
+                      
+                        {hasWarehouseScope && assignedWarehouseId && (
+                          <div className="mb-4 px-4 py-2 rounded-lg text-xs flex items-center gap-2"
+                            style={{ background: "var(--color-info-soft)", border: "1px solid var(--color-info-border)" }}>
+                            <span style={{ color: "var(--color-info)" }}>🔒</span>
+                            <span style={{ color: "var(--color-text-secondary)" }}>
+                              You are viewing products for <strong style={{ color: "var(--color-text-primary)" }}>
+                                {warehouses.find(w => w.id === assignedWarehouseId)?.name || assignedWarehouseId}
+                              </strong>
+                            </span>
+                          </div>
+                        )}
                     </p>
                   </div>
                   <div className="min-w-55">
@@ -1067,7 +1125,15 @@ const getTimeAgo = (date: Date): string => {
                   <StatCard title="Total Inventory Value" value={`$${totalValue.toLocaleString("en-US",{minimumFractionDigits:2})}`} change={5.2} sparkData={SPARKS.value} sparkColor="var(--color-chart-indigo)" iconBg="var(--color-nav-active-bg)" icon={<MdAttachMoney size={18} style={{color:"var(--color-brand-primary-soft)"}}/>}/>
                   <StatCard title="Stock on Hand"        value={totalStock.toLocaleString()} change={3.7} sparkData={SPARKS.stock} sparkColor="var(--color-chart-green)" iconBg="var(--color-stock-in-soft)" icon={<MdInventory2 size={18} style={{color:"var(--color-stock-in)"}}/>}/>
                   <StatCard title="Out of Stock"         value={String(outOfStock)} change={-12.4} sparkData={SPARKS.out} sparkColor="var(--color-chart-red)" iconBg="var(--color-stock-out-soft)" icon={<MdRemoveShoppingCart size={18} style={{color:"var(--color-stock-out)"}}/>}/>
-                  <StatCard title="Pending Orders"       value={String(lowStock)} change={-8.1} sparkData={SPARKS.orders} sparkColor="var(--color-chart-purple)" iconBg="var(--color-order-pending-soft)" icon={<MdShoppingCart size={18} style={{color:"var(--color-order-pending)"}}/>}/>
+                  <StatCard 
+                    title="Pending Orders" 
+                    value={String(pendingOrders)} 
+                    change={0} 
+                    sparkData={SPARKS.orders} 
+                    sparkColor="var(--color-chart-purple)" 
+                    iconBg="var(--color-order-pending-soft)" 
+                    icon={<MdShoppingCart size={18} style={{color:"var(--color-order-pending)"}}/>}
+                  />
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   <div className="lg:col-span-2"><InventoryTurnoverChart productsOverride={displayedProducts}/></div>
@@ -2203,36 +2269,71 @@ const getTimeAgo = (date: Date): string => {
       {showAddStaff && <AddStaffModal companyId={companyId} onClose={() => setShowAddStaff(false)} onAdded={() => loadStaff()} warehouses={warehouses} />}
 
       {editItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <StockStateEditor
-            id={editItem.id}
-            qty={editItem.stockQuantity ?? 0}
-            price={editItem.price ?? 0}
-            stockState={0}
-            index={0}
-            companyId={companyId}
-            canEditPrice={isOwner}
-            canDelete={canDeleteProduct}
-            onClose={() => setEditId(null)}
-            onDelete={canDeleteProduct ? async (_e, id) => {
-              const { deleteDoc, doc } = await import("firebase/firestore");
-              const { default: db } = await import("../services/firebase");
-              await deleteDoc(doc(db, "companies", companyId, "products", id));
-              setEditId(null);
-            } : undefined}
-          />
-        </div>
-      )}
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+    <StockStateEditor
+      id={editItem.id}
+      qty={editItemWarehouseStock}
+      price={editItem.price ?? 0}
+      companyId={companyId}
+      warehouseId={previewWarehouseId}
+      warehouseName={currentWarehouseName}
+      canEditPrice={isOwner}
+      canDelete={canDeleteProduct}
+      onClose={() => setEditId(null)}
+      onUpdateComplete={() => {
+        // Refresh data after update
+        loadWarehouses();
+        // Force a re-render of the products preview
+        if (previewWarehouseId) {
+          setSelectedWarehouseId(previewWarehouseId);
+        }
+      }}
+      onDelete={canDeleteProduct ? async (_e, id) => {
+        const { deleteDoc, doc } = await import("firebase/firestore");
+        const { default: db } = await import("../services/firebase");
+        await deleteDoc(doc(db, "companies", companyId, "products", id));
+        setEditId(null);
+        loadWarehouses();
+      } : undefined}
+    />
+  </div>
+)}
 
-{/* ✅ Sale Modal - Add this here */}
+{/* ✅ Sale Modal */}
 {selectedProductForSale && (
   <SaleModal
     product={selectedProductForSale.product}
     companyId={companyId}
     warehouseId={selectedProductForSale.warehouseId}
     warehouseName={selectedProductForSale.warehouseName}
+    availableStock={selectedProductForSale.availableStock} // ✅ Pass available stock
     onClose={() => setSelectedProductForSale(null)}
     onSaleComplete={refreshAllData}
+  />
+)}
+
+
+{/* Add a button to create orders */}
+<button
+  onClick={() => setShowOrderModal(true)}
+  className="px-4 py-2 rounded-xl text-sm font-semibold"
+  style={{ background: "var(--color-brand-primary)", color: "white" }}
+>
+  + New Order
+</button>
+
+{/* Order Modal */}
+{showOrderModal && (
+  <OrderModal
+    companyId={companyId}
+    warehouseId={previewWarehouseId}
+    warehouseName={warehouses.find(w => w.id === previewWarehouseId)?.name || previewWarehouseId}
+    products={displayedProducts}
+    onClose={() => setShowOrderModal(false)}
+    onOrderComplete={() => {
+      loadPendingOrders();
+      refreshAllData();
+    }}
   />
 )}
     </div>

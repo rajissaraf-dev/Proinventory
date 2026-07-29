@@ -36,7 +36,6 @@ const Navbar = () => {
     dispatch(clearCurrentUser());
     dispatch(clearCompany());
     sessionStorage.removeItem("currentUser");
-    localStorage.removeItem("currentUser");
     navigate("/");
   };
 

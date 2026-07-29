@@ -8,7 +8,6 @@ import {
 import DashboardSidebar  from "../components/dashboard/DashboardSidebar";
 import DashboardHeader   from "../components/dashboard/DashboardHeader";
 import AddProductView    from "../components/dashboard/AddProductView";
-import StockStateEditor  from "../components/dashboard/StockStateEditor";
 import {
   StatCard, InventoryTurnoverChart,
   CategoryDonutChart, LowStockPanel,
@@ -21,6 +20,7 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { WarehouseService } from "../services/warehouse.service";
 import { InventoryService } from "../services/inventory.service";
 import { TransferService } from "../services/transfer.service";
+import { StockStateEditor } from "../components/dashboard/StockStateEditor";
 
 type DashView = "dashboard" | "add-product";
 

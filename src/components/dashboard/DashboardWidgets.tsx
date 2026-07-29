@@ -12,7 +12,7 @@ import { MdTrendingUp, MdTrendingDown, MdInfoOutline, MdCheckCircle, MdSwapHoriz
 import { FiEdit2, FiMoreHorizontal } from "react-icons/fi";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
-import { Product } from "../../types";
+import { Product, InventoryRecord } from "../../types"; // ✅ Added InventoryRecord
 import { StockMovementService } from "../../services/stock-movement.service";
 
 ChartJS.register(
@@ -290,6 +290,8 @@ export const CategoryDonutChart = ({ productsOverride }: CategoryDonutChartProps
     </div>
   );
 };
+
+
 /* ─────────────────────────────────────────────────────────────
    LOW STOCK ALERT PANEL
 ───────────────────────────────────────────────────────────── */
@@ -316,25 +318,28 @@ export const LowStockPanel = ({
     }
     
     const inventoryItems = warehouseInventory[warehouseId] || [];
-    const item = inventoryItems.find((i: any) => i.productId === productId);
+    const item = inventoryItems.find((i: InventoryRecord) => i.productId === productId); // ✅ Fixed any
     return item?.quantity || 0;
   };
 
-  // Filter products where stock is 10 or less (including 0)
-  const lowItems = products
+  // ✅ Separate out-of-stock and low-stock items
+  const outOfStockItems = products
+    .filter((p: Product) => getWarehouseStock(p.id) === 0)
+    .slice(0, 5);
+    
+  const lowStockItems = products
     .filter((p: Product) => {
       const stock = getWarehouseStock(p.id);
-      return stock <= 10;
+      return stock > 0 && stock <= 10;
     })
-    .sort((a, b) => {
-      const stockA = getWarehouseStock(a.id);
-      const stockB = getWarehouseStock(b.id);
-      return stockA - stockB;
-    })
-    .slice(0, 8);
+    .sort((a, b) => getWarehouseStock(a.id) - getWarehouseStock(b.id))
+    .slice(0, 5);
+
+  // Combine: out of stock first, then low stock
+  const allItems = [...outOfStockItems, ...lowStockItems].slice(0, 8);
 
   // Show empty state when no low stock items
-  if (lowItems.length === 0) {
+  if (allItems.length === 0) {
     return (
       <div
         className="rounded-xl p-4 flex flex-col items-center justify-center min-h-[200px]"
@@ -368,30 +373,31 @@ export const LowStockPanel = ({
     >
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
-          Low Stock Alert 
+          Stock Alert
           {warehouseId && <span style={{ color: "var(--color-text-faint)" }}> in {warehouseId}</span>}
           <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--color-text-faint)" }}>
-            (10 or less units)
+            ({outOfStockItems.length} out of stock • {lowStockItems.length} low stock)
           </span>
         </p>
         <button className="text-xs" style={{ color: "var(--color-brand-primary-soft)" }}>View All</button>
       </div>
 
       <ul className="space-y-3">
-        {lowItems.map((item, i) => {
+        {allItems.map((item, i) => {
           const product = item as Product;
           const stock = getWarehouseStock(product.id);
           const isOutOfStock = stock === 0;
+          const isLowStock = stock > 0 && stock <= 10;
           
           return (
             <li key={product.id ?? i} className="flex items-center gap-3">
               <div
                 className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-lg"
-                style={{ background: isOutOfStock ? "var(--color-danger-soft)" : "var(--color-surface-3)" }}
+                style={{ background: isOutOfStock ? "var(--color-danger-soft)" : "var(--color-stock-low-soft)" }}
               >
                 {product.img
                   ? <img src={product.img} alt="" className="w-full h-full rounded-lg object-cover" />
-                  : isOutOfStock ? "⚠️" : "📦"}
+                  : isOutOfStock ? "🚫" : "⚠️"}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>
@@ -401,7 +407,7 @@ export const LowStockPanel = ({
                       (Out of Stock)
                     </span>
                   )}
-                  {!isOutOfStock && stock <= 10 && (
+                  {isLowStock && (
                     <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--color-stock-low)" }}>
                       (Low Stock)
                     </span>
@@ -422,6 +428,13 @@ export const LowStockPanel = ({
           );
         })}
       </ul>
+      
+      {/* Show summary if there are more items */}
+      {allItems.length >= 8 && (
+        <div className="mt-3 pt-2 text-center text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+          Showing top {allItems.length} items. View all for complete list.
+        </div>
+      )}
     </div>
   );
 };
@@ -438,12 +451,11 @@ interface ActivityItem {
 }
 
 interface RecentActivityPanelProps {
-  productsOverride?: Product[];
-  warehouseId?: string; // ✅ Add warehouseId
+  warehouseId?: string; // ✅ Removed unused productsOverride
 }
 
-export const RecentActivityPanel = ({ productsOverride, warehouseId }: RecentActivityPanelProps) => {
-  const reduxProducts = useSelector((s: RootState) => s.stock.productData);
+export const RecentActivityPanel = ({ warehouseId }: RecentActivityPanelProps) => {
+  // ✅ Removed unused reduxProducts and productsOverride
   const companyId = useSelector((s: RootState) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -463,7 +475,7 @@ export const RecentActivityPanel = ({ productsOverride, warehouseId }: RecentAct
     return date.toLocaleDateString();
   };
 
-  // ✅ Load real activity data filtered by warehouse
+  // Load real activity data filtered by warehouse
   useEffect(() => {
     const loadActivities = async () => {
       if (!companyId) {
@@ -473,15 +485,12 @@ export const RecentActivityPanel = ({ productsOverride, warehouseId }: RecentAct
       
       try {
         setLoading(true);
-        // Get recent stock movements
         let movements = await StockMovementService.listRecent(companyId, 20);
         
-        // ✅ Filter by warehouse if specified
         if (warehouseId) {
           movements = movements.filter(m => m.warehouseId === warehouseId);
         }
         
-        // Take only the most recent 5
         movements = movements.slice(0, 5);
         
         const activityItems: ActivityItem[] = movements.map((movement) => {
@@ -505,7 +514,7 @@ export const RecentActivityPanel = ({ productsOverride, warehouseId }: RecentAct
               <>
                 <strong>{movement.productName}</strong> {action} <strong>{Math.abs(movement.quantity)}</strong> units
                 {movement.type && ` (${movement.type.replace("_", " ")})`}
-                {warehouseId && ` in ${movement.warehouseName || movement.warehouseId}`}
+                {warehouseId && ` in ${movement.warehouseId}`} {/* ✅ Fixed - use warehouseId */}
               </>
             ),
             time: timeAgo,
@@ -522,7 +531,8 @@ export const RecentActivityPanel = ({ productsOverride, warehouseId }: RecentAct
     };
     
     loadActivities();
-  }, [companyId, warehouseId]); // ✅ Re-run when warehouseId changes
+  }, [companyId, warehouseId]);
+
 
   // Show loading state
   if (loading) {
@@ -761,7 +771,8 @@ export const ProductsTable = ({ onEdit, onAdd,onSell, readOnly = false, products
                     ) : (
                       <div className="flex items-center gap-2">
                         {/* ✅ Sell Button - New */}
-                        {onSell && product.product_Qty > 0 && (
+                    
+                        {onSell && product.product_Qty > 0 && !readOnly && (
                           <button
                             onClick={() => onSell(product)}
                             className="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-green-500/10"

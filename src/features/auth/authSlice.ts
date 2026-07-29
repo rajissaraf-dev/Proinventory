@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore";
 import db from "../../services/firebase";
 import { CurrentUser, CurrentUserState, UserProfile, DEFAULT_PERMISSIONS } from "../../types";
+import { sanitizeCurrentUser, sanitizeUserProfile } from "../../services/sanitize.service";
 
 // ── Helper: convert Firestore Timestamps to ISO strings so Redux stays serializable ──
 const serializeProfile = (data: Record<string, any>): UserProfile => {
@@ -14,7 +15,7 @@ const serializeProfile = (data: Record<string, any>): UserProfile => {
 
   const normalizedStatus = data.status ?? "active";
 
-  return {
+  const profile = {
     ...data,
     uid:                data.uid       ?? "",
     email:              data.email     ?? "",
@@ -28,6 +29,15 @@ const serializeProfile = (data: Record<string, any>): UserProfile => {
     createdAt:          toISO(data.createdAt),
     updatedAt:          toISO(data.updatedAt),
   } as UserProfile;
+  
+  // ── XSS Protection: Sanitize profile data ──
+  const sanitized = sanitizeUserProfile(profile);
+  if (!sanitized) {
+    console.error("❌ [authSlice] Profile sanitization failed — data rejected");
+    throw new Error("User profile validation failed");
+  }
+  
+  return sanitized;
 };
 
 /**
@@ -83,8 +93,23 @@ export const fetchUsers = createAsyncThunk<CurrentUser[]>(
   }
 );
 
-const rawStored  = sessionStorage.getItem("currentUser") || localStorage.getItem("currentUser");
-const parsedUser = rawStored ? (JSON.parse(rawStored) as CurrentUser) : null;
+const rawStored  = sessionStorage.getItem("currentUser");
+let parsedUser: CurrentUser | null = null;
+
+if (rawStored) {
+  try {
+    const parsed = JSON.parse(rawStored);
+    // ── XSS Protection: Sanitize stored user data ──
+    parsedUser = sanitizeCurrentUser(parsed);
+    if (!parsedUser) {
+      console.warn("⚠️ [authSlice] Stored user data failed sanitization — clearing");
+      sessionStorage.removeItem("currentUser");
+    }
+  } catch (err) {
+    console.error("❌ [authSlice] Failed to parse stored user:", err);
+    sessionStorage.removeItem("currentUser");
+  }
+}
 
 // Discard stale fake companyIds generated before seed script existed
 const stored = parsedUser?.companyId?.startsWith("guest_company_") ? null : parsedUser;
@@ -102,14 +127,19 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setCurrentUser(state, action: PayloadAction<CurrentUser>) {
-      state.user = action.payload;
-      sessionStorage.setItem("currentUser", JSON.stringify(action.payload));
+      // ── XSS Protection: Sanitize before storing ──
+      const sanitized = sanitizeCurrentUser(action.payload);
+      if (!sanitized) {
+        console.error("❌ [authSlice] User data failed sanitization — not stored");
+        return;
+      }
+      state.user = sanitized;
+      sessionStorage.setItem("currentUser", JSON.stringify(sanitized));
     },
     clearCurrentUser(state) {
       state.user    = null;
       state.profile = null;
       sessionStorage.removeItem("currentUser");
-      localStorage.removeItem("currentUser");
       console.log("🔓 [authSlice] Session cleared.");
     },
     addUsers(state, action: PayloadAction<CurrentUser[]>) {
@@ -124,17 +154,39 @@ const authSlice = createSlice({
       .addCase(fetchUserProfile.fulfilled, (state, action) => {
         state.status  = "succeeded";
         state.profile = action.payload;
-        if (state.user) {
-          state.user = {
-            ...state.user,
-            companyId:          action.payload.companyId,
-            displayName:        action.payload.displayName,
-            role:               action.payload.role,
-            isSuperAdmin:       action.payload.isSuperAdmin,
-            assignedWarehouseId: action.payload.assignedWarehouseId,
-          };
-          sessionStorage.setItem("currentUser", JSON.stringify(state.user));
+        const updatedUser = {
+        ...state.user,
+        uid:                 action.payload.uid,
+        email:               action.payload.email,
+        companyId:          action.payload.companyId,
+        displayName:        action.payload.displayName,
+        role:               action.payload.role,
+        isSuperAdmin:       action.payload.isSuperAdmin,
+        assignedWarehouseId: action.payload.assignedWarehouseId,
+      };
+
+      // ── XSS Protection: Sanitize before storing ──
+      const sanitized = sanitizeCurrentUser(updatedUser);
+      if (sanitized) {
+        state.user = sanitized;
+        sessionStorage.setItem("currentUser", JSON.stringify(sanitized));
+      } else {
+        // If stored user is missing partial auth state, build from profile
+        const fallbackUser = {
+          uid: action.payload.uid,
+          email: action.payload.email,
+          companyId: action.payload.companyId,
+          displayName: action.payload.displayName,
+          role: action.payload.role,
+          isSuperAdmin: action.payload.isSuperAdmin,
+          assignedWarehouseId: action.payload.assignedWarehouseId,
+        };
+        const fallbackSanitized = sanitizeCurrentUser(fallbackUser);
+        if (fallbackSanitized) {
+          state.user = fallbackSanitized;
+          sessionStorage.setItem("currentUser", JSON.stringify(fallbackSanitized));
         }
+      }
       })
       .addCase(fetchUserProfile.rejected, (state, action) => {
         state.status = "failed";

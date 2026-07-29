@@ -1,3 +1,4 @@
+// services/firebase.ts - BACK TO BASICS
 import { initializeApp } from "firebase/app";
 import {
   EmailAuthProvider,
@@ -17,7 +18,7 @@ const firebaseConfig = {
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string,
   appId: import.meta.env.VITE_FIREBASE_APP_ID as string,
-  measurementId:import.meta.env.VITE_MEASUREMENT_ID as string,
+  measurementId: import.meta.env.VITE_MEASUREMENT_ID as string,
 };
 
 const app = initializeApp(firebaseConfig);
@@ -33,19 +34,16 @@ export function logOut(): Promise<void> {
   return signOut(auth);
 }
 
-/**
- * Returns `undefined` while Firebase resolves auth state,
- * `null` when signed out, or the `User` object when signed in.
- */
 export function useAuth(): User | null | undefined {
-  const [currentUser, setCurrentUser] = useState<User | null | undefined>(
-    undefined
-  );
+  const [currentUser, setCurrentUser] = useState<User | null | undefined>(undefined);
+  
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) =>
-      setCurrentUser(user)
-    );
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log("🔐 [useAuth] User:", user?.uid || 'null');
+      setCurrentUser(user);
+    });
     return unsubscribe;
   }, []);
+  
   return currentUser;
 }

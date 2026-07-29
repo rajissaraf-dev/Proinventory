@@ -1,4 +1,4 @@
-import { useState, useEffect,useNavigation } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   MdDashboard, MdInventory, MdShoppingCart, MdReceipt,
@@ -46,28 +46,33 @@ const DashboardSidebar = ({
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [localNotificationCount, setLocalNotificationCount] = useState(notificationCount);
   const companyId = useAppSelector(s => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
 
-  // Load notification count periodically
+  // Load notification count periodically with better error handling
   useEffect(() => {
     if (!companyId) return;
     
     const loadCount = async () => {
       try {
-        await NotificationService.getUnreadCount(companyId);
-        // If you need to use the count, set it in state
-        // setNotificationCount(count);
+        const count = await NotificationService.getUnreadCount(companyId);
+        setLocalNotificationCount(count);
       } catch (error) {
         console.error("Failed to load notification count:", error);
+        // Keep existing count, don't reset to 0 on error
       }
     };
     
+    // Initial load
     loadCount();
     
-    // Refresh every 30 seconds
-    const interval = setInterval(loadCount, 30000);
+    // Refresh every 60 seconds instead of 30 to reduce load
+    const interval = setInterval(loadCount, 60000);
     return () => clearInterval(interval);
   }, [companyId]);
+
+  // Use local count if notificationCount prop is not provided
+  const displayCount = notificationCount || localNotificationCount;
 
   const handleLogout = async () => {
     try {
@@ -78,7 +83,8 @@ const DashboardSidebar = ({
       localStorage.removeItem("currentUser");
       navigate("/login");
     } catch (err) {
-      alert((err as Error).message);
+      console.error("Logout error:", err);
+      alert((err as Error).message || "Failed to log out. Please try again.");
     }
   };
 
@@ -95,28 +101,20 @@ const DashboardSidebar = ({
     { label: "Integrations", icon: <MdExtension size={18} />, to: "/dashboard" },
   ];
 
-  // Use notificationCount for the badge
+  // Use displayCount for the badge
   const bottomNav: NavItem[] = [
-
-      { 
-    label: "Notifications", 
-    icon: <MdNotifications size={18} />, 
-    onClick: () => {
-      if (onAlertsClick) {
-        onAlertsClick();
-      } else {
-        navigate("/dashboard?tab=notifications");
-      }
-    }, 
-    badge: notificationCount
-  },
-
-    // { 
-    //   label: "Notifications", 
-    //   icon: <MdNotifications size={18} />, 
-    //   onClick: onAlertsClick ?? (() => navigate("/dashboard")), 
-    //   badge: notificationCount // ✅ Use notificationCount
-    // },
+    { 
+      label: "Notifications", 
+      icon: <MdNotifications size={18} />, 
+      onClick: () => {
+        if (onAlertsClick) {
+          onAlertsClick();
+        } else {
+          navigate("/dashboard?tab=notifications");
+        }
+      }, 
+      badge: displayCount
+    },
     { label: "Messages", icon: <MdMessage size={18} />, to: "/dashboard", badge: messageCount },
     { label: "Settings", icon: <MdSettings size={18} />, to: "/dashboard" },
     { label: "Log Out", icon: <MdLogout size={18} />, onClick: handleLogout },
@@ -144,20 +142,20 @@ const DashboardSidebar = ({
               {item.icon}
             </span>
             {!collapsed && <span className="truncate">{item.label}</span>}
-            {!collapsed && item.badge && (
+            {!collapsed && item.badge && item.badge > 0 && (
               <span
                 className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full"
                 style={{ background: "var(--color-danger)", color: "white" }}
               >
-                {item.badge}
+                {item.badge > 99 ? '99+' : item.badge}
               </span>
             )}
-            {collapsed && item.badge && (
+            {collapsed && item.badge && item.badge > 0 && (
               <span
                 className="absolute top-0.5 right-0.5 w-4 h-4 flex items-center justify-center text-[9px] font-bold rounded-full"
                 style={{ background: "var(--color-danger)", color: "white" }}
               >
-                {item.badge}
+                {item.badge > 99 ? '99+' : item.badge}
               </span>
             )}
             {/* Tooltip when collapsed */}

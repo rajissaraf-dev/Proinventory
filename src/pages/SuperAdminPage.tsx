@@ -90,7 +90,7 @@ const SuperAdminPage = () => {
         </div>
         <div className="flex gap-3">
           <button onClick={load} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs" style={{background:"var(--color-surface-3)",color:"var(--color-text-muted)",border:"1px solid var(--color-border-soft)"}}><MdRefresh size={14}/> Refresh</button>
-          <button onClick={async()=>{ await logOut(); dispatch(clearCurrentUser()); dispatch(clearCompany()); sessionStorage.removeItem("currentUser"); localStorage.removeItem("currentUser"); navigate("/login"); }} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs" style={{background:"var(--color-danger-soft)",color:"var(--color-danger)",border:"1px solid var(--color-danger-border)"}}><MdLogout size={14}/> Sign Out</button>
+          <button onClick={async()=>{ await logOut(); dispatch(clearCurrentUser()); dispatch(clearCompany()); sessionStorage.removeItem("currentUser"); navigate("/login"); }} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs" style={{background:"var(--color-danger-soft)",color:"var(--color-danger)",border:"1px solid var(--color-danger-border)"}}><MdLogout size={14}/> Sign Out</button>
         </div>
       </header>
 

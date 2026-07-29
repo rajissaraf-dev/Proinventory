@@ -10,12 +10,11 @@ export interface FirebaseTimestamp {
 
 // ─── Role & Plan enums ───────────────────────────────────────────────────────
 
+// ── REMOVED: super_admin and guest ──
 export type UserRole =
-  | "super_admin"       // platform-wide admin — sees everything
-  | "company_owner"     // business owner — full access to own company
+  | "company_owner"     // business owner — full access to own company (super admin)
   | "company_admin"     // delegated admin inside a company
-  | "staff"             // can view + add products, cannot delete/update
-  | "guest";            // same permissions as company_owner (demo)
+  | "staff";            // can view + add products, cannot delete/update
 
 export type SubscriptionPlan = "starter" | "most_popular" | "enterprise";
 
@@ -45,21 +44,8 @@ export interface UserPermissions {
 }
 
 /** Default permissions per role */
+// ── REMOVED: super_admin and guest ──
 export const DEFAULT_PERMISSIONS: Record<UserRole, UserPermissions> = {
-  super_admin: {
-    dashboard:      { read: true },
-    products:       { read: true, write: true, delete: true },
-    categories:     { read: true, write: true, delete: true },
-    orders:         { read: true, write: true, delete: true },
-    purchaseOrders: { read: true, write: true, delete: true },
-    stock:          { read: true, write: true, delete: true, adjust: true },
-    suppliers:      { read: true, write: true, delete: true },
-    customers:      { read: true, write: true, delete: true },
-    reports:        { read: true, write: true, delete: true },
-    settings:       { read: true, write: true, delete: true },
-    users:          { read: true, write: true, delete: true },
-    sales: { read: true, write: true, delete: false },
-  },
   company_owner: {
     dashboard:      { read: true },
     products:       { read: true, write: true, delete: true },
@@ -72,7 +58,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, UserPermissions> = {
     reports:        { read: true, write: true, delete: false },
     settings:       { read: true, write: true, delete: false },
     users:          { read: true, write: true, delete: true },
-    sales: { read: true, write: true, delete: false },
+    sales:          { read: true, write: true, delete: false },
   },
   company_admin: {
     dashboard:      { read: true },
@@ -86,22 +72,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, UserPermissions> = {
     reports:        { read: true, write: false, delete: false },
     settings:       { read: true, write: false, delete: false },
     users:          { read: true, write: true, delete: false },
-    sales: { read: true, write: true, delete: false },
-  },
-  // Guest = same as company_owner (full demo access)
-  guest: {
-    dashboard:      { read: true },
-    products:       { read: true, write: true, delete: true },
-    categories:     { read: true, write: true, delete: true },
-    orders:         { read: true, write: true, delete: true },
-    purchaseOrders: { read: true, write: true, delete: true },
-    stock:          { read: true, write: true, delete: true, adjust: true },
-    suppliers:      { read: true, write: true, delete: true },
-    customers:      { read: true, write: true, delete: true },
-    reports:        { read: true, write: true, delete: false },
-    settings:       { read: true, write: true, delete: false },
-    users:          { read: true, write: true, delete: true },
-    sales: { read: true, write: true, delete: false },
+    sales:          { read: true, write: true, delete: false },
   },
   staff: {
     dashboard:      { read: true },
@@ -115,7 +86,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, UserPermissions> = {
     reports:        { read: false, write: false, delete: false },
     settings:       { read: false, write: false, delete: false },
     users:          { read: false, write: false, delete: false },
-    sales: { read: true, write: true, delete: false },
+    sales:          { read: true, write: true, delete: false },
   },
 };
 
@@ -206,6 +177,7 @@ export const PLANS: PlanDefinition[] = [
 // ─── Domain models ───────────────────────────────────────────────────────────
 
 /** users/{uid} — Global user profile */
+// ── REMOVED: isSuperAdmin ──
 export interface UserProfile {
   uid:                string;
   email:              string;
@@ -213,11 +185,10 @@ export interface UserProfile {
   companyId:          string;
   role:               UserRole;
   status:             UserStatus;
-  isSuperAdmin:       boolean;
   permissions:        UserPermissions;
   assignedWarehouseId?: string;
-  createdAt:          FirebaseTimestamp | Date;
-  updatedAt:          FirebaseTimestamp | Date;
+  createdAt:          FirebaseTimestamp | Date | string | null;
+  updatedAt:          FirebaseTimestamp | Date | string | null;
 }
 
 /** companies/{companyId} */
@@ -278,8 +249,8 @@ export interface Product {
   imageUrl?:     string;
   companyId:     string;
   createdBy:     string;
-  createdAt:     FirebaseTimestamp | Date | string;
-  updatedAt:     FirebaseTimestamp | Date | string;
+  createdAt:     FirebaseTimestamp | Date | string | null;
+  updatedAt:     FirebaseTimestamp | Date | string | null;
   // Legacy compat / analytics fields
   product_name?:        string;
   product_Qty?:         number;
@@ -455,13 +426,13 @@ export type BusinessProfile = Company & {
   user_id?:        string;
 };
 
+// ── REMOVED: isSuperAdmin ──
 export interface CurrentUser {
   uid:                string;
   email:              string | null;
   companyId?:         string;
   displayName?:       string;
   role?:              UserRole;
-  isSuperAdmin?:      boolean;
   assignedWarehouseId?: string;
 }
 

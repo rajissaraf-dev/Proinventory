@@ -58,13 +58,11 @@ export const sanitizeCurrentUser = (data: unknown): CurrentUser | null => {
     return null;
   }
 
-  // Validate role if provided
+  // ── UPDATED: Valid roles (removed guest and super_admin) ──
   const validRoles = [
     "company_owner",
     "company_admin",
     "staff",
-    "guest",
-    "super_admin",
   ];
   const role = obj.role;
   if (role !== undefined && !validRoles.includes(role as string)) {
@@ -79,8 +77,8 @@ export const sanitizeCurrentUser = (data: unknown): CurrentUser | null => {
     return null;
   }
 
-  // Validate isSuperAdmin (must be boolean)
-  const isSuperAdmin = obj.isSuperAdmin === true;
+  // ── REMOVED: isSuperAdmin validation ──
+  // (owner is the super admin, so this field is no longer needed)
 
   // Validate assignedWarehouseId (optional, but sanitize if present)
   const assignedWarehouseId = sanitizeString(obj.assignedWarehouseId || "");
@@ -91,7 +89,7 @@ export const sanitizeCurrentUser = (data: unknown): CurrentUser | null => {
     companyId: companyId || undefined,
     role: role !== undefined ? (role as CurrentUser["role"]) : undefined,
     displayName: displayName || undefined,
-    isSuperAdmin,
+    // ── REMOVED: isSuperAdmin ──
     assignedWarehouseId: assignedWarehouseId || undefined,
   } as CurrentUser;
 };
@@ -107,13 +105,14 @@ export const sanitizeUserProfile = (data: unknown): UserProfile | null => {
   const obj = data as Record<string, unknown>;
 
   // Use CurrentUser sanitization for base fields
+  // ── REMOVED: isSuperAdmin from the sanitizeCurrentUser call ──
   const currentUser = sanitizeCurrentUser({
     uid: obj.uid,
     email: obj.email,
     companyId: obj.companyId,
     role: obj.role,
     displayName: obj.displayName,
-    isSuperAdmin: obj.isSuperAdmin,
+    // isSuperAdmin: obj.isSuperAdmin, ← REMOVED
     assignedWarehouseId: obj.assignedWarehouseId,
   });
 
@@ -126,6 +125,7 @@ export const sanitizeUserProfile = (data: unknown): UserProfile | null => {
       ? (obj.status as "active" | "inactive")
       : "active",
     permissions: obj.permissions || {},
+    // ── REMOVED: isSuperAdmin ──
     createdAt: typeof obj.createdAt === "string" ? obj.createdAt : null,
     updatedAt: typeof obj.updatedAt === "string" ? obj.updatedAt : null,
   } as UserProfile;

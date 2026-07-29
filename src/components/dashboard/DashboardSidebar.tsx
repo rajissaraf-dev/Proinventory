@@ -5,7 +5,8 @@ import {
   MdPeople, MdWarehouse, MdSwapHoriz, MdBarChart,
   MdDescription, MdExtension, MdNotifications,
   MdMessage, MdSettings, MdLogout, MdChevronLeft,
-  MdMenu, MdAdd,
+  MdMenu,
+  MdChevronRight,
 } from "react-icons/md";
 import { logOut } from "../../services/firebase";
 import { clearCurrentUser } from "../../features/auth/authSlice";
@@ -24,7 +25,6 @@ interface NavItem {
 }
 
 interface DashboardSidebarProps {
-  onNewItem: () => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
   activeView?: "dashboard" | "add-product";
@@ -34,7 +34,6 @@ interface DashboardSidebarProps {
 }
 
 const DashboardSidebar = ({
-  onNewItem,
   collapsed,
   onToggleCollapse,
   activeView = "dashboard",
@@ -90,7 +89,7 @@ const DashboardSidebar = ({
 
   const mainNav: NavItem[] = [
     { label: "Dashboard", icon: <MdDashboard size={18} />, to: "/dashboard" },
-    { label: "Products", icon: <MdInventory size={18} />, to: "/dashboard" },
+    { label: "Products", icon: <MdInventory size={18} />, to: "/products" },
     { label: "Orders", icon: <MdShoppingCart size={18} />, to: "/dashboard" },
     { label: "Purchase Orders", icon: <MdReceipt size={18} />, to: "/dashboard" },
     { label: "Suppliers", icon: <MdPeople size={18} />, to: "/dashboard" },
@@ -211,18 +210,24 @@ const DashboardSidebar = ({
           style={{ color: "var(--color-nav-icon)" }}
           aria-label="Toggle sidebar"
         >
-          {collapsed ? <MdMenu size={16} /> : <MdChevronLeft size={16} />}
+          {collapsed ? <MdChevronRight size={16} /> : <MdChevronLeft size={16} />}
         </button>
       </div>
 
-      {/* Main nav */}
-      <nav className="flex-1 overflow-y-auto scrollbar-hide px-2 py-3">
+      {/* ─── Main nav with natural scrolling ─── */}
+      <nav 
+        className="flex-1 overflow-y-auto px-2 py-3"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'var(--color-border-soft) transparent',
+        }}
+      >
         <ul className="space-y-0.5">
           {mainNav.map((item) => <NavLink key={item.label} item={item} />)}
         </ul>
       </nav>
 
-      {/* Bottom nav */}
+      {/* ─── Bottom nav ─── */}
       <div
         className="px-2 py-3 shrink-0"
         style={{ borderTop: "1px solid var(--color-border-subtle)" }}
@@ -231,36 +236,7 @@ const DashboardSidebar = ({
           {bottomNav.map((item) => <NavLink key={item.label} item={item} />)}
         </ul>
 
-        {/* Upgrade to Pro card */}
-        {!collapsed && (
-          <div
-            className="mx-2 mb-3 p-3 rounded-xl"
-            style={{
-              background: "linear-gradient(135deg, #1e1b4b 0%, #2e1065 100%)",
-              border: "1px solid var(--color-border-brand)",
-            }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-base">👑</span>
-              <p className="text-xs font-bold" style={{ color: "var(--color-text-primary)" }}>
-                Upgrade to Pro
-              </p>
-            </div>
-            <p className="text-[11px] mb-3 leading-snug" style={{ color: "var(--color-text-muted)" }}>
-              Unlock advanced features and reports.
-            </p>
-            <button
-              className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              style={{
-                background: "var(--color-brand-primary)",
-                color: "white",
-              }}
-            >
-              Upgrade Now
-              <span>→</span>
-            </button>
-          </div>
-        )}
+        {/* ─── REMOVED: "Upgrade to Pro" card ─── */}
 
         {/* Collapse toggle label */}
         {!collapsed && (

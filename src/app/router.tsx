@@ -1,54 +1,72 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, Navigate } from "react-router-dom";
 import RootLayout        from "../components/layout/RootLayout";
 import ProtectedRoute    from "./ProtectedRoute";
 import RoleRoute         from "./RoleRoute";
 import LoadingSpinner    from "../components/ui/LoadingSpinner";
 
 /* ── Public pages ── */
-const HomePage          = lazy(() => import("../pages/HomePage"));
 const LoginPage         = lazy(() => import("../pages/LoginPage"));
-const RegisterPage      = lazy(() => import("../pages/RegisterPage"));
 const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
 const NotFoundPage      = lazy(() => import("../pages/NotFoundPage"));
 
-/* ── Authenticated pages (role-specific) ── */
-const SuperAdminPage      = lazy(() => import("../pages/SuperAdminPage"));
+/* ── Authenticated pages ── */
 const OwnerDashboardPage  = lazy(() => import("../pages/OwnerDashboardPage"));
-const DashboardPage       = lazy(() => import("../pages/DashboardPage"));
-const BusinessProfilePage = lazy(() => import("../pages/BusinessProfilePage"));
+const ProductsPage        = lazy(() => import("../pages/ProductsPage"));
 
 const AppRouter = () => (
   <Suspense fallback={<LoadingSpinner />}>
     <Routes>
       <Route element={<RootLayout />}>
 
-        {/* ── Public ── */}
-        <Route index          element={<HomePage />} />
-        <Route path="login"   element={<LoginPage />} />
-        <Route path="register"element={<RegisterPage />} />
-        <Route path="reset"   element={<ResetPasswordPage />} />
+        {/* ── Public Routes ── */}
+        {/* Redirect root to login */}
+        <Route index element={<Navigate to="/login" replace />} />
+        <Route path="login" element={<LoginPage />} />
+        <Route path="reset" element={<ResetPasswordPage />} />
 
-        {/* ── Authenticated ── */}
+        {/* ── Authenticated Routes ── */}
         <Route element={<ProtectedRoute />}>
 
-          {/* Super Admin only */}
-          <Route element={<RoleRoute allow={["super_admin"]} redirectTo="/dashboard" />}>
-            <Route path="superadmin" element={<SuperAdminPage />} />
+          {/* 
+            ── Owner Dashboard ──
+            company_owner = super admin (full access to everything)
+            company_admin = full access except destructive actions
+          */}
+          <Route 
+            element={
+              <RoleRoute 
+                allow={["company_owner", "company_admin"]} 
+                redirectTo="/dashboard" 
+              />
+            }
+          >
+            <Route path="owner" element={<OwnerDashboardPage />} />
           </Route>
 
-          {/* Business Owner + Company Admin + Guest (= company management access) */}
-          <Route element={<RoleRoute allow={["company_owner", "company_admin", "guest"]} redirectTo="/dashboard" />}>
-            <Route path="owner"            element={<OwnerDashboardPage />} />
-            <Route path="business-profile" element={<BusinessProfilePage />} />
-          </Route>
+          {/* 
+            ── Dashboard ──
+            All authenticated users including staff can access
+            Role-aware rendering happens inside OwnerDashboardPage
+          */}
+          <Route path="dashboard" element={<OwnerDashboardPage />} />
 
-          {/* All authenticated users — role-aware rendering inside */}
-          <Route path="dashboard" element={<DashboardPage />} />
+          {/* 
+            ── Products Page ──
+            All authenticated users can view and sell products
+            Only owner and admin can edit/delete
+          */}
+          <Route path="products" element={<ProductsPage />} />
+
+          {/* 
+            ── Redirect /superadmin to /owner ──
+            Since owner is the super admin now
+          */}
+          <Route path="superadmin" element={<Navigate to="/owner" replace />} />
 
         </Route>
 
-        {/* 404 */}
+        {/* ── 404 ── */}
         <Route path="*" element={<NotFoundPage />} />
 
       </Route>

@@ -1,3 +1,4 @@
+// src/components/dashboard/DashboardWidgets.tsx
 import { useEffect, useMemo, useState } from "react";
 import {
   Chart as ChartJS,
@@ -8,11 +9,16 @@ import {
   type ChartOptions,
 } from "chart.js";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
-import { MdTrendingUp, MdTrendingDown, MdInfoOutline, MdCheckCircle, MdSwapHoriz, MdInventory2, MdAttachMoney } from "react-icons/md";
+import { 
+  MdTrendingUp, MdTrendingDown, MdInfoOutline, MdCheckCircle, 
+  MdSwapHoriz, MdInventory2, MdAttachMoney, MdLock,
+  MdWarning, MdError, MdDoneAll, MdArrowForward,
+  MdSearch, MdFilterList, MdMoreVert
+} from "react-icons/md";
 import { FiEdit2, FiMoreHorizontal } from "react-icons/fi";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
-import { Product, InventoryRecord } from "../../types"; // ✅ Added InventoryRecord
+import { Product, InventoryRecord } from "../../types";
 import { StockMovementService } from "../../services/stock-movement.service";
 
 ChartJS.register(
@@ -21,91 +27,182 @@ ChartJS.register(
 );
 
 /* ─────────────────────────────────────────────────────────────
-   MINI SPARKLINE (used inside stat cards)
+   MINI SPARKLINE (enhanced)
 ───────────────────────────────────────────────────────────── */
 interface SparklineProps {
   data: number[];
   color: string;
   fill?: boolean;
 }
-const Sparkline = ({ data, color, fill = true }: SparklineProps) => (
-  <Line
-    data={{
-      labels: data.map((_, i) => i),
-      datasets: [{
-        data,
-        borderColor: color,
-        backgroundColor: fill ? `${color}22` : "transparent",
-        borderWidth: 1.5,
-        pointRadius: 0,
-        tension: 0.4,
-        fill,
-      }],
-    }}
-    options={{
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { enabled: false } },
-      scales: { x: { display: false }, y: { display: false } },
-      animation: false,
-    }}
-    style={{ height: "48px" }}
-  />
-);
+
+const Sparkline = ({ data, color, fill = true }: SparklineProps) => {
+  // Guard against empty data
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-12 flex items-center justify-center">
+        <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+          No data available
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <Line
+      data={{
+        labels: data.map((_, i) => i),
+        datasets: [{
+          data,
+          borderColor: color,
+          backgroundColor: fill ? `${color}22` : "transparent",
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.4,
+          fill,
+        }],
+      }}
+      options={{
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { 
+          legend: { display: false }, 
+          tooltip: { 
+            enabled: true,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            titleColor: '#fff',
+            bodyColor: '#e2e8f0',
+            cornerRadius: 8,
+            padding: 8,
+          } 
+        },
+        scales: { 
+          x: { display: false }, 
+          y: { display: false } 
+        },
+        animation: {
+          duration: 600,
+          easing: 'easeInOutQuart',
+        },
+        interaction: {
+          intersect: false,
+          mode: 'index',
+        },
+      }}
+      style={{ height: "48px" }}
+    />
+  );
+};
 
 /* ─────────────────────────────────────────────────────────────
-   STAT CARD
+   STAT CARD (enhanced with restricted state)
 ───────────────────────────────────────────────────────────── */
 interface StatCardProps {
   title: string;
   value: string;
-  change: number;
-  sparkData: number[];
-  sparkColor: string;
+  change?: number;
+  sparkData?: number[];
+  sparkColor?: string;
   iconBg: string;
   icon: React.ReactNode;
+  restricted?: boolean;
+  trend?: 'up' | 'down' | 'neutral';
 }
-export const StatCard = ({ title, value, change, sparkData, sparkColor, iconBg, icon }: StatCardProps) => {
-  const positive = change >= 0;
+
+export const StatCard = ({ 
+  title, 
+  value, 
+  change, 
+  sparkData, 
+  sparkColor, 
+  iconBg, 
+  icon, 
+  restricted = false,
+}: StatCardProps) => {
+  const positive = change !== undefined && change >= 0;
+  const showTrend = change !== undefined && !restricted;
+  
+  // Determine trend icon
+  const TrendIcon = () => {
+    if (restricted) return null;
+    if (positive) return <MdTrendingUp style={{ color: "var(--color-success)" }} />;
+    if (change !== undefined && change < 0) return <MdTrendingDown style={{ color: "var(--color-danger)" }} />;
+    return null;
+  };
+
   return (
     <div
-      className="rounded-xl p-4 flex flex-col gap-2 relative overflow-hidden"
+      className="rounded-2xl p-5 transition-all duration-300 hover:shadow-lg hover:scale-[1.01] group"
       style={{
         background: "var(--color-surface-1)",
-        border: "1px solid var(--color-border-soft)",
+        border: `1px solid ${restricted ? "var(--color-border-soft)" : "var(--color-border-soft)"}`,
+        opacity: restricted ? 0.85 : 1,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
       }}
     >
       <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: "var(--color-text-muted)" }}>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
             {title}
           </p>
-          <p className="text-2xl font-extrabold tracking-tight" style={{ color: "var(--color-text-primary)" }}>
+          <p
+            className={`text-2xl font-extrabold mt-1 transition-all ${
+              restricted ? "tracking-wider" : ""
+            }`}
+            style={{
+              color: restricted ? "var(--color-text-muted)" : "var(--color-text-primary)",
+            }}
+          >
             {value}
           </p>
+          {!restricted && showTrend && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <div className="flex items-center gap-0.5 text-xs font-medium">
+                <TrendIcon />
+                <span style={{ color: positive ? "var(--color-success)" : "var(--color-danger)" }}>
+                  {positive ? "+" : ""}{change}%
+                </span>
+              </div>
+              <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+                vs last 30 days
+              </span>
+            </div>
+          )}
+          {restricted && (
+            <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: "var(--color-text-faint)" }}>
+              <MdLock size={12} /> Owner only
+            </p>
+          )}
         </div>
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: iconBg }}>
+        <div
+          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all group-hover:scale-105"
+          style={{
+            background: restricted ? "var(--color-surface-3)" : iconBg,
+          }}
+        >
           {icon}
         </div>
       </div>
-      <div className="flex items-center gap-1 text-xs">
-        {positive
-          ? <MdTrendingUp style={{ color: "var(--color-success)" }} />
-          : <MdTrendingDown style={{ color: "var(--color-danger)" }} />}
-        <span style={{ color: positive ? "var(--color-success)" : "var(--color-danger)" }}>
-          {positive ? "+" : ""}{change}%
-        </span>
-        <span style={{ color: "var(--color-text-faint)" }}> vs last 30 days</span>
-      </div>
-      <div className="h-12 w-full mt-1">
-        <Sparkline data={sparkData} color={sparkColor} />
-      </div>
+
+      {/* Sparkline */}
+      {!restricted && sparkData && sparkData.length > 0 && (
+        <div className="mt-3 h-12">
+          <Sparkline data={sparkData} color={sparkColor || "var(--color-brand-primary-soft)"} />
+        </div>
+      )}
+      {restricted && (
+        <div className="mt-3 h-12 flex items-center justify-center rounded-lg" style={{ background: "var(--color-surface-2)" }}>
+          <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+            🔒 Financial data restricted
+          </span>
+        </div>
+      )}
     </div>
   );
 };
 
 /* ─────────────────────────────────────────────────────────────
-   INVENTORY TURNOVER BAR CHART
+   INVENTORY TURNOVER BAR CHART (enhanced)
 ───────────────────────────────────────────────────────────── */
 interface InventoryTurnoverChartProps {
   productsOverride?: Product[];
@@ -120,7 +217,6 @@ export const InventoryTurnoverChart = ({ productsOverride }: InventoryTurnoverCh
   const returnData  = [2000,3000,2500,1500,4000,3500,2000];
   const adjustData  = [1000,1500,3000,2000,2500,1000,3500];
 
-  // overlay real product data if available
   if (products.length > 0) {
     products.slice(0, 7).forEach((p: Product, i: number) => {
       soldData[i] = Math.min(p.product_Qty * 10, 20000);
@@ -130,9 +226,30 @@ export const InventoryTurnoverChart = ({ productsOverride }: InventoryTurnoverCh
   const data = {
     labels,
     datasets: [
-      { label: "Sold", data: soldData, backgroundColor: "rgba(99,102,241,0.85)", borderRadius: 3, stack: "a" },
-      { label: "Returned", data: returnData, backgroundColor: "rgba(34,197,94,0.75)", borderRadius: 3, stack: "a" },
-      { label: "Adjustment", data: adjustData, backgroundColor: "rgba(245,158,11,0.75)", borderRadius: 3, stack: "a" },
+      { 
+        label: "Sold", 
+        data: soldData, 
+        backgroundColor: "rgba(99,102,241,0.85)", 
+        borderRadius: 4, 
+        stack: "a",
+        hoverBackgroundColor: "rgba(99,102,241,1)",
+      },
+      { 
+        label: "Returned", 
+        data: returnData, 
+        backgroundColor: "rgba(34,197,94,0.75)", 
+        borderRadius: 4, 
+        stack: "a",
+        hoverBackgroundColor: "rgba(34,197,94,1)",
+      },
+      { 
+        label: "Adjustment", 
+        data: adjustData, 
+        backgroundColor: "rgba(245,158,11,0.75)", 
+        borderRadius: 4, 
+        stack: "a",
+        hoverBackgroundColor: "rgba(245,158,11,1)",
+      },
     ],
   };
 
@@ -144,19 +261,50 @@ export const InventoryTurnoverChart = ({ productsOverride }: InventoryTurnoverCh
         display: true,
         position: "top" as const,
         align: "start" as const,
-        labels: { color: "#94a3b8", boxWidth: 10, font: { size: 11 }, padding: 12 },
+        labels: { 
+          color: "#94a3b8", 
+          boxWidth: 12, 
+          font: { 
+            size: 11, 
+            weight: 'normal' as const,
+          }, 
+          padding: 16,
+          usePointStyle: true,
+          pointStyle: 'circle',
+        },
       },
-      tooltip: { mode: "index" as const, intersect: false },
+      tooltip: { 
+        mode: "index" as const, 
+        intersect: false,
+        backgroundColor: 'rgba(15,23,42,0.9)',
+        titleColor: '#f1f5f9',
+        bodyColor: '#cbd5e1',
+        cornerRadius: 8,
+        padding: 12,
+        borderColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1,
+      },
     },
     scales: {
       x: {
         stacked: true,
-        grid: { display: false },
+        grid: { 
+          display: false, // ← Hide x-axis grid lines
+        },
+        border: {
+          display: false, // ← Hide x-axis border
+        },
         ticks: { color: "#64748b", font: { size: 11 } },
       },
       y: {
         stacked: true,
-        grid: { color: "rgba(255,255,255,0.05)" },
+        grid: { 
+          color: "rgba(255,255,255,0.05)", // ← Grid line color
+          lineWidth: 1,                    // ← Grid line width
+        },
+        border: {
+          display: false, // ← Hide y-axis border
+        },
         ticks: {
           color: "#64748b",
           font: { size: 11 },
@@ -164,25 +312,52 @@ export const InventoryTurnoverChart = ({ productsOverride }: InventoryTurnoverCh
         },
       },
     },
+    animation: {
+      duration: 800,
+      easing: 'easeInOutQuart',
+    },
   };
 
   return (
     <div
-      className="rounded-xl p-4 flex flex-col"
-      style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
+      className="rounded-xl p-5 flex flex-col transition-all hover:shadow-md"
+      style={{ 
+        background: "var(--color-surface-1)", 
+        border: "1px solid var(--color-border-soft)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+      }}
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
-            Inventory Turnover <span style={{ color: "var(--color-text-faint)" }}>(Last 30 Days)</span>
+            Inventory Turnover
           </p>
+          <p className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>Last 30 days</p>
         </div>
-        <button
-          className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg"
-          style={{ background: "var(--color-surface-3)", color: "var(--color-text-muted)", border: "1px solid var(--color-border-soft)" }}
-        >
-          Last 30 Days ▾
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-lg" style={{ 
+            background: "var(--color-surface-3)", 
+            color: "var(--color-text-muted)",
+            border: "1px solid var(--color-border-soft)" 
+          }}>
+            <span className="w-2 h-2 rounded-full" style={{ background: "rgba(99,102,241,0.85)" }} />
+            <span>Sold</span>
+            <span className="w-2 h-2 rounded-full ml-1" style={{ background: "rgba(34,197,94,0.75)" }} />
+            <span>Returned</span>
+            <span className="w-2 h-2 rounded-full ml-1" style={{ background: "rgba(245,158,11,0.75)" }} />
+            <span>Adj</span>
+          </div>
+          <button
+            className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-70"
+            style={{ 
+              background: "var(--color-surface-3)", 
+              color: "var(--color-text-muted)", 
+              border: "1px solid var(--color-border-soft)" 
+            }}
+          >
+            Last 30 Days <span className="text-[10px]">▾</span>
+          </button>
+        </div>
       </div>
       <div style={{ height: "200px" }}>
         <Bar data={data} options={options} />
@@ -190,9 +365,8 @@ export const InventoryTurnoverChart = ({ productsOverride }: InventoryTurnoverCh
     </div>
   );
 };
-
 /* ─────────────────────────────────────────────────────────────
-   STOCK DISTRIBUTION DONUT CHART
+   STOCK DISTRIBUTION DONUT CHART (enhanced)
 ───────────────────────────────────────────────────────────── */
 interface CategoryDonutChartProps {
   productsOverride?: Product[];
@@ -226,74 +400,105 @@ export const CategoryDonutChart = ({ productsOverride }: CategoryDonutChartProps
       backgroundColor: COLORS,
       borderColor: "transparent",
       borderWidth: 0,
-      hoverOffset: 6,
+      hoverOffset: 8,
     }],
   };
 
   const options: ChartOptions<"doughnut"> = {
     responsive: true,
     maintainAspectRatio: false,
-    cutout: "68%",
+    cutout: "70%",
     plugins: {
       legend: { display: false },
       tooltip: {
+        backgroundColor: 'rgba(15,23,42,0.9)',
+        titleColor: '#f1f5f9',
+        bodyColor: '#cbd5e1',
+        cornerRadius: 8,
+        padding: 12,
         callbacks: {
           label: (context) => ` ${context.label}: ${PCT[context.dataIndex]}%`,
         },
       },
     },
+    animation: {
+      animateRotate: true,
+      duration: 800,
+    },
   };
 
   return (
     <div
-      className="rounded-xl p-4 flex flex-col"
-      style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
+      className="rounded-xl p-5 flex flex-col transition-all hover:shadow-md"
+      style={{ 
+        background: "var(--color-surface-1)", 
+        border: "1px solid var(--color-border-soft)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+      }}
     >
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
-          Stock Distribution by Category
-        </p>
-        <MdInfoOutline size={14} style={{ color: "var(--color-text-faint)" }} />
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
+            Stock Distribution
+          </p>
+          <p className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>By category</p>
+        </div>
+        <MdInfoOutline size={16} style={{ color: "var(--color-text-faint)" }} className="cursor-help" />
       </div>
 
-      <div className="flex items-center gap-4">
-        {/* Donut */}
-        <div className="relative shrink-0" style={{ width: 140, height: 140 }}>
+      <div className="flex items-center gap-5">
+        {/* Donut with improved center text */}
+        <div className="relative shrink-0" style={{ width: 150, height: 150 }}>
           <Doughnut data={data} options={options} />
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <p className="text-lg font-extrabold leading-none" style={{ color: "var(--color-text-primary)" }}>
+            <p className="text-xl font-extrabold leading-none" style={{ color: "var(--color-text-primary)" }}>
               {total.toLocaleString()}
             </p>
-            <p className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>Total items</p>
+            <p className="text-[10px] mt-0.5" style={{ color: "var(--color-text-faint)" }}>Total Items</p>
           </div>
         </div>
 
-        {/* Legend */}
-        <ul className="flex-1 space-y-2">
-          {labels.map((label, i) => (
-            <li key={label} className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: COLORS[i] }} />
-                <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{label}</span>
+        {/* Enhanced Legend with progress bars */}
+        <ul className="flex-1 space-y-2.5">
+          {labels.slice(0, 5).map((label, i) => (
+            <li key={label} className="flex items-center justify-between group">
+              <div className="flex items-center gap-2.5 flex-1">
+                <span className="w-3 h-3 rounded-full shrink-0 transition-all group-hover:scale-110" style={{ background: COLORS[i % COLORS.length] }} />
+                <span className="text-xs truncate max-w-[100px]" style={{ color: "var(--color-text-secondary)" }}>
+                  {label}
+                </span>
               </div>
-              <span className="text-xs font-semibold" style={{ color: "var(--color-text-primary)" }}>
-                {PCT[i]}%
-              </span>
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--color-surface-3)" }}>
+                  <div 
+                    className="h-full rounded-full transition-all duration-500" 
+                    style={{ 
+                      width: `${PCT[i]}%`,
+                      background: COLORS[i % COLORS.length],
+                    }} 
+                  />
+                </div>
+                <span className="text-xs font-semibold w-10 text-right" style={{ color: "var(--color-text-primary)" }}>
+                  {PCT[i]}%
+                </span>
+              </div>
             </li>
           ))}
         </ul>
       </div>
 
-      <button className="mt-3 text-xs self-start" style={{ color: "var(--color-brand-primary-soft)" }}>
-        View full report →
+      <button 
+        className="mt-4 text-xs self-start flex items-center gap-1 transition-all hover:gap-2" 
+        style={{ color: "var(--color-brand-primary-soft)" }}
+      >
+        View full report <MdArrowForward size={12} />
       </button>
     </div>
   );
 };
 
-
 /* ─────────────────────────────────────────────────────────────
-   LOW STOCK ALERT PANEL
+   LOW STOCK ALERT PANEL (enhanced)
 ───────────────────────────────────────────────────────────── */
 interface LowStockPanelProps {
   productsOverride?: Product[];
@@ -310,19 +515,16 @@ export const LowStockPanel = ({
   const products = productsOverride ?? reduxProducts;
   const warehouseInventory = propWarehouseInventory || {};
 
-  // Get warehouse-specific stock levels
   const getWarehouseStock = (productId: string): number => {
     if (!warehouseId) {
       const product = products.find(p => p.id === productId);
       return product?.product_Qty || 0;
     }
-    
     const inventoryItems = warehouseInventory[warehouseId] || [];
-    const item = inventoryItems.find((i: InventoryRecord) => i.productId === productId); // ✅ Fixed any
+    const item = inventoryItems.find((i: InventoryRecord) => i.productId === productId);
     return item?.quantity || 0;
   };
 
-  // ✅ Separate out-of-stock and low-stock items
   const outOfStockItems = products
     .filter((p: Product) => getWarehouseStock(p.id) === 0)
     .slice(0, 5);
@@ -335,25 +537,27 @@ export const LowStockPanel = ({
     .sort((a, b) => getWarehouseStock(a.id) - getWarehouseStock(b.id))
     .slice(0, 5);
 
-  // Combine: out of stock first, then low stock
   const allItems = [...outOfStockItems, ...lowStockItems].slice(0, 8);
+  const totalAlerts = outOfStockItems.length + lowStockItems.length;
 
-  // Show empty state when no low stock items
   if (allItems.length === 0) {
     return (
       <div
-        className="rounded-xl p-4 flex flex-col items-center justify-center min-h-[200px]"
-        style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
+        className="rounded-xl p-6 flex flex-col items-center justify-center min-h-[220px] transition-all hover:shadow-md"
+        style={{ 
+          background: "var(--color-surface-1)", 
+          border: "1px solid var(--color-border-soft)",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        }}
       >
         <div className="text-center">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
-            style={{ background: "var(--color-stock-in-soft)" }}>
-            <MdCheckCircle size={24} style={{ color: "var(--color-stock-in)" }} />
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 animate-bounce" style={{ background: "var(--color-stock-in-soft)" }}>
+            <MdDoneAll size={28} style={{ color: "var(--color-stock-in)" }} />
           </div>
           <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
             All Stock Levels Are Healthy
           </p>
-          <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
+          <p className="text-xs mt-1 max-w-xs mx-auto" style={{ color: "var(--color-text-muted)" }}>
             {warehouseId 
               ? `All products in this warehouse have more than 10 units in stock.` 
               : `All products have more than 10 units in stock.`}
@@ -368,18 +572,46 @@ export const LowStockPanel = ({
 
   return (
     <div
-      className="rounded-xl p-4 flex flex-col"
-      style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
+      className="rounded-xl p-5 flex flex-col transition-all hover:shadow-md"
+      style={{ 
+        background: "var(--color-surface-1)", 
+        border: "1px solid var(--color-border-soft)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+      }}
     >
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
-          Stock Alert
-          {warehouseId && <span style={{ color: "var(--color-text-faint)" }}> in {warehouseId}</span>}
-          <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--color-text-faint)" }}>
-            ({outOfStockItems.length} out of stock • {lowStockItems.length} low stock)
-          </span>
-        </p>
-        <button className="text-xs" style={{ color: "var(--color-brand-primary-soft)" }}>View All</button>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
+            Stock Alert
+          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            {warehouseId && (
+              <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+                in {warehouseId}
+              </span>
+            )}
+            <span className="flex items-center gap-2 text-[10px]">
+              {outOfStockItems.length > 0 && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: "var(--color-danger-soft)" }}>
+                  <MdError size={10} style={{ color: "var(--color-danger)" }} />
+                  <span style={{ color: "var(--color-danger)" }}>{outOfStockItems.length} out of stock</span>
+                </span>
+              )}
+              {lowStockItems.length > 0 && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: "var(--color-stock-low-soft)" }}>
+                  <MdWarning size={10} style={{ color: "var(--color-stock-low)" }} />
+                  <span style={{ color: "var(--color-stock-low)" }}>{lowStockItems.length} low stock</span>
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+        <button 
+          className="text-xs flex items-center gap-1 transition-all hover:gap-2" 
+          style={{ color: "var(--color-brand-primary-soft)" }}
+        >
+          View All <MdArrowForward size={12} />
+        </button>
       </div>
 
       <ul className="space-y-3">
@@ -390,28 +622,28 @@ export const LowStockPanel = ({
           const isLowStock = stock > 0 && stock <= 10;
           
           return (
-            <li key={product.id ?? i} className="flex items-center gap-3">
+            <li 
+              key={product.id ?? i} 
+              className={`flex items-center gap-3 p-2 rounded-xl transition-all hover:scale-[1.01] ${
+                isOutOfStock ? 'animate-pulse' : ''
+              }`}
+              style={{ 
+                background: isOutOfStock ? "var(--color-danger-soft)" : isLowStock ? "var(--color-stock-low-soft)" : "var(--color-surface-2)",
+              }}
+            >
               <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-lg"
-                style={{ background: isOutOfStock ? "var(--color-danger-soft)" : "var(--color-stock-low-soft)" }}
+                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-xl"
+                style={{ 
+                  background: isOutOfStock ? "var(--color-danger)" : isLowStock ? "var(--color-stock-low)" : "var(--color-surface-3)",
+                }}
               >
                 {product.img
-                  ? <img src={product.img} alt="" className="w-full h-full rounded-lg object-cover" />
+                  ? <img src={product.img} alt="" className="w-full h-full rounded-xl object-cover" />
                   : isOutOfStock ? "🚫" : "⚠️"}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>
                   {product.product_name}
-                  {isOutOfStock && (
-                    <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--color-danger)" }}>
-                      (Out of Stock)
-                    </span>
-                  )}
-                  {isLowStock && (
-                    <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--color-stock-low)" }}>
-                      (Low Stock)
-                    </span>
-                  )}
                 </p>
                 <p className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
                   {product.sku ?? `SKU-${product.id?.slice(0, 6).toUpperCase()}`}
@@ -419,8 +651,7 @@ export const LowStockPanel = ({
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>Stock</p>
-                <p className={`text-sm font-extrabold ${isOutOfStock ? 'animate-pulse' : ''}`} 
-                   style={{ color: stockColor(stock) }}>
+                <p className="text-base font-extrabold" style={{ color: stockColor(stock) }}>
                   {stock}
                 </p>
               </div>
@@ -429,10 +660,9 @@ export const LowStockPanel = ({
         })}
       </ul>
       
-      {/* Show summary if there are more items */}
       {allItems.length >= 8 && (
         <div className="mt-3 pt-2 text-center text-[10px]" style={{ color: "var(--color-text-faint)" }}>
-          Showing top {allItems.length} items. View all for complete list.
+          Showing {allItems.length} of {totalAlerts} items
         </div>
       )}
     </div>
@@ -440,9 +670,8 @@ export const LowStockPanel = ({
 };
 
 /* ─────────────────────────────────────────────────────────────
-   RECENT ACTIVITY PANEL
+   RECENT ACTIVITY PANEL (enhanced)
 ───────────────────────────────────────────────────────────── */
-
 interface ActivityItem {
   icon: string;
   iconBg: string;
@@ -451,16 +680,14 @@ interface ActivityItem {
 }
 
 interface RecentActivityPanelProps {
-  warehouseId?: string; // ✅ Removed unused productsOverride
+  warehouseId?: string;
 }
 
 export const RecentActivityPanel = ({ warehouseId }: RecentActivityPanelProps) => {
-  // ✅ Removed unused reduxProducts and productsOverride
   const companyId = useSelector((s: RootState) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Helper function to format time ago
   const getTimeAgo = (date: Date): string => {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -475,7 +702,6 @@ export const RecentActivityPanel = ({ warehouseId }: RecentActivityPanelProps) =
     return date.toLocaleDateString();
   };
 
-  // Load real activity data filtered by warehouse
   useEffect(() => {
     const loadActivities = async () => {
       if (!companyId) {
@@ -491,7 +717,7 @@ export const RecentActivityPanel = ({ warehouseId }: RecentActivityPanelProps) =
           movements = movements.filter(m => m.warehouseId === warehouseId);
         }
         
-        movements = movements.slice(0, 5);
+        movements = movements.slice(0, 6);
         
         const activityItems: ActivityItem[] = movements.map((movement) => {
           const isPositive = movement.quantity > 0;
@@ -512,9 +738,20 @@ export const RecentActivityPanel = ({ warehouseId }: RecentActivityPanelProps) =
             iconBg,
             text: (
               <>
-                <strong>{movement.productName}</strong> {action} <strong>{Math.abs(movement.quantity)}</strong> units
-                {movement.type && ` (${movement.type.replace("_", " ")})`}
-                {warehouseId && ` in ${movement.warehouseId}`} {/* ✅ Fixed - use warehouseId */}
+                <strong style={{ color: "var(--color-text-primary)" }}>{movement.productName}</strong>
+                <span style={{ color: "var(--color-text-muted)" }}> {action} </span>
+                <strong style={{ color: isPositive ? "var(--color-success)" : "var(--color-danger)" }}>
+                  {Math.abs(movement.quantity)}
+                </strong>
+                <span style={{ color: "var(--color-text-muted)" }}> units</span>
+                {movement.type && (
+                  <span className="text-[10px] ml-1 px-1.5 py-0.5 rounded" style={{ 
+                    background: "var(--color-surface-3)", 
+                    color: "var(--color-text-faint)" 
+                  }}>
+                    {movement.type.replace("_", " ")}
+                  </span>
+                )}
               </>
             ),
             time: timeAgo,
@@ -533,40 +770,35 @@ export const RecentActivityPanel = ({ warehouseId }: RecentActivityPanelProps) =
     loadActivities();
   }, [companyId, warehouseId]);
 
-
-  // Show loading state
   if (loading) {
     return (
       <div
-        className="rounded-xl p-4 flex flex-col items-center justify-center min-h-[200px]"
+        className="rounded-xl p-6 flex flex-col items-center justify-center min-h-[220px]"
         style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
       >
-        <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
-          style={{ borderColor: "var(--color-brand-primary)" }} />
-        <p className="text-xs mt-2" style={{ color: "var(--color-text-muted)" }}>Loading activity...</p>
+        <div className="w-8 h-8 border-3 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-brand-primary)" }} />
+        <p className="text-xs mt-3" style={{ color: "var(--color-text-muted)" }}>Loading activity...</p>
       </div>
     );
   }
 
-  // Show empty state when no activities exist
   if (activities.length === 0) {
     return (
       <div
-        className="rounded-xl p-4 flex flex-col items-center justify-center min-h-[200px]"
+        className="rounded-xl p-6 flex flex-col items-center justify-center min-h-[220px]"
         style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
       >
         <div className="text-center">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
-            style={{ background: "var(--color-surface-3)" }}>
-            <MdSwapHoriz size={24} style={{ color: "var(--color-text-faint)" }} />
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: "var(--color-surface-3)" }}>
+            <MdSwapHoriz size={28} style={{ color: "var(--color-text-faint)" }} />
           </div>
           <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
             No Recent Activity
           </p>
-          <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
+          <p className="text-xs mt-1 max-w-xs mx-auto" style={{ color: "var(--color-text-muted)" }}>
             {warehouseId 
               ? `No activity in this warehouse yet.` 
-              : `Activity will appear here when you start adding products, making transfers, or updating inventory.`}
+              : `Activity will appear here when you add products, make transfers, or update inventory.`}
           </p>
         </div>
       </div>
@@ -575,30 +807,45 @@ export const RecentActivityPanel = ({ warehouseId }: RecentActivityPanelProps) =
 
   return (
     <div
-      className="rounded-xl p-4 flex flex-col"
-      style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
+      className="rounded-xl p-5 flex flex-col transition-all hover:shadow-md"
+      style={{ 
+        background: "var(--color-surface-1)", 
+        border: "1px solid var(--color-border-soft)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+      }}
     >
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
-          Recent Activity {warehouseId && <span style={{ color: "var(--color-text-faint)" }}>in {warehouseId}</span>}
-        </p>
-        <button className="text-xs" style={{ color: "var(--color-brand-primary-soft)" }}>View All</button>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
+            Recent Activity
+          </p>
+          {warehouseId && (
+            <p className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>in {warehouseId}</p>
+          )}
+        </div>
+        <button 
+          className="text-xs flex items-center gap-1 transition-all hover:gap-2" 
+          style={{ color: "var(--color-brand-primary-soft)" }}
+        >
+          View All <MdArrowForward size={12} />
+        </button>
       </div>
 
-      <ul className="space-y-4">
+      <ul className="space-y-3.5">
         {activities.map((a, i) => (
-          <li key={i} className="flex items-start gap-3">
+          <li key={i} className="flex items-start gap-3 group">
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm"
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base transition-all group-hover:scale-105"
               style={{ background: a.iconBg }}
             >
               {a.icon}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs leading-snug" style={{ color: "var(--color-text-secondary)" }}>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
                 {a.text}
               </p>
-              <p className="text-[10px] mt-0.5" style={{ color: "var(--color-text-faint)" }}>
+              <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: "var(--color-text-faint)" }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--color-text-faint)" }} />
                 {a.time}
               </p>
             </div>
@@ -610,7 +857,7 @@ export const RecentActivityPanel = ({ warehouseId }: RecentActivityPanelProps) =
 };
 
 /* ─────────────────────────────────────────────────────────────
-   PRODUCTS OVERVIEW TABLE
+   PRODUCTS OVERVIEW TABLE (enhanced)
 ───────────────────────────────────────────────────────────── */
 interface ProductsTableProps {
   onEdit?: (id: string) => void;
@@ -620,32 +867,33 @@ interface ProductsTableProps {
   productsOverride?: Product[];
 }
 
-export const ProductsTable = ({ onEdit, onAdd,onSell, readOnly = false, productsOverride }: ProductsTableProps) => {
+export const ProductsTable = ({ onEdit, onAdd, onSell, readOnly = false, productsOverride }: ProductsTableProps) => {
   const reduxProducts = useSelector((s: RootState) => s.stock.productData);
   const products = productsOverride ?? reduxProducts;
 
-  // If no products, show empty state
   if (products.length === 0) {
     return (
       <div
-        className="rounded-xl flex flex-col items-center justify-center min-h-[300px]"
-        style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
+        className="rounded-xl flex flex-col items-center justify-center min-h-[320px]"
+        style={{ 
+          background: "var(--color-surface-1)", 
+          border: "2px dashed var(--color-border-soft)",
+        }}
       >
         <div className="text-center p-8">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-            style={{ background: "var(--color-surface-3)" }}>
-            <MdInventory2 size={32} style={{ color: "var(--color-text-faint)" }} />
+          <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 animate-float" style={{ background: "var(--color-surface-3)" }}>
+            <MdInventory2 size={40} style={{ color: "var(--color-text-faint)" }} />
           </div>
-          <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
-            No Products Added Yet
+          <p className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            No Products Yet
           </p>
-          <p className="text-xs mt-1 max-w-sm mx-auto" style={{ color: "var(--color-text-muted)" }}>
-            Start by adding your first product to track inventory, stock levels, and orders.
+          <p className="text-sm mt-1 max-w-sm mx-auto" style={{ color: "var(--color-text-muted)" }}>
+            Start by adding your first product to track inventory and stock levels.
           </p>
           {onAdd && (
             <button
               onClick={onAdd}
-              className="mt-4 px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-80"
+              className="mt-6 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all hover:scale-105 hover:shadow-lg"
               style={{ background: "var(--color-brand-primary)", color: "white" }}
             >
               + Add Your First Product
@@ -660,60 +908,88 @@ export const ProductsTable = ({ onEdit, onAdd,onSell, readOnly = false, products
   const visible = products.slice(0, PAGE_SIZE);
 
   const statusInfo = (qty: number): { label: string; bg: string; text: string; border: string } => {
-    if (qty === 0)  return { label: "Out of Stock", bg: "var(--color-stock-out-soft)",   text: "var(--color-stock-out)",   border: "var(--color-stock-out-border)" };
-    if (qty <= 5)   return { label: "Low Stock",    bg: "var(--color-stock-low-soft)",   text: "var(--color-stock-low)",   border: "var(--color-stock-low-border)" };
-    return           { label: "In Stock",           bg: "var(--color-stock-in-soft)",    text: "var(--color-stock-in)",    border: "var(--color-stock-in-border)" };
+    if (qty === 0)  return { 
+      label: "Out of Stock", 
+      bg: "var(--color-stock-out-soft)",   
+      text: "var(--color-stock-out)",   
+      border: "var(--color-stock-out-border)" 
+    };
+    if (qty <= 5)   return { 
+      label: "Low Stock",    
+      bg: "var(--color-stock-low-soft)",   
+      text: "var(--color-stock-low)",   
+      border: "var(--color-stock-low-border)" 
+    };
+    return { 
+      label: "In Stock",           
+      bg: "var(--color-stock-in-soft)",    
+      text: "var(--color-stock-in)",    
+      border: "var(--color-stock-in-border)" 
+    };
   };
 
   return (
     <div
-      className="rounded-xl flex flex-col"
-      style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
+      className="rounded-xl flex flex-col transition-all hover:shadow-md"
+      style={{ 
+        background: "var(--color-surface-1)", 
+        border: "1px solid var(--color-border-soft)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+      }}
     >
-      {/* Table header */}
+      {/* Table header with enhanced search */}
       <div
-        className="flex items-center justify-between px-4 py-3"
+        className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5"
         style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
       >
         <h3 className="text-sm font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-primary)" }}>
           Products Overview
+          <span className="ml-2 text-xs font-normal" style={{ color: "var(--color-text-faint)" }}>
+            ({products.length} items)
+          </span>
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div
-            className="flex items-center gap-2 h-8 px-3 rounded-lg text-xs"
+            className="flex items-center gap-2 h-9 px-3.5 rounded-lg text-xs transition-all focus-within:ring-2 focus-within:ring-brand-primary/20"
             style={{
               background: "var(--color-input-bg)",
               border: "1px solid var(--color-input-border)",
               color: "var(--color-input-placeholder)",
             }}
           >
-            🔍 Search products...
+            <MdSearch size={14} style={{ color: "var(--color-input-icon)" }} />
+            <input
+              type="text"
+              placeholder="Search products..."
+              className="bg-transparent outline-none text-xs min-w-[120px]"
+              style={{ color: "var(--color-input-text)" }}
+            />
           </div>
           <button
-            className="h-8 px-3 rounded-lg text-xs flex items-center gap-1"
+            className="h-9 px-3.5 rounded-lg text-xs flex items-center gap-1.5 transition-all hover:bg-surface-3"
             style={{
               background: "var(--color-surface-3)",
               color: "var(--color-text-muted)",
               border: "1px solid var(--color-border-soft)",
             }}
           >
-            ⚙ Filters
+            <MdFilterList size={14} /> Filters
           </button>
-          <button className="w-8 h-8 flex items-center justify-center rounded-lg" style={{ color: "var(--color-text-muted)" }}>
-            <FiMoreHorizontal size={14} />
+          <button className="w-9 h-9 flex items-center justify-center rounded-lg transition-all hover:bg-surface-3" style={{ color: "var(--color-text-muted)" }}>
+            <MdMoreVert size={18} />
           </button>
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table with enhanced styling */}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
-              {["", "SKU", "Product Name", "Category", "Price", "Stock Quantity", "Status", "Actions"].map((h) => (
+              {["", "SKU", "Product Name", "Category", "Price", "Stock", "Status", "Actions"].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-3 text-left font-semibold uppercase tracking-wide"
+                  className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]"
                   style={{ color: "var(--color-text-faint)" }}
                 >
                   {h}
@@ -722,46 +998,71 @@ export const ProductsTable = ({ onEdit, onAdd,onSell, readOnly = false, products
             </tr>
           </thead>
           <tbody>
-            {visible.map((item) => {
+            {visible.map((item, index) => {
               const product = item as Product;
               const status = statusInfo(product.product_Qty ?? 0);
               return (
                 <tr
                   key={product.id}
-                  className="transition-colors"
-                  style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-2)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  className="transition-all duration-200"
+                  style={{ 
+                    borderBottom: index < visible.length - 1 ? "1px solid var(--color-border-subtle)" : "none",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "var(--color-surface-2)";
+                    (e.currentTarget as HTMLElement).style.transform = "scale(1.001)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                    (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+                  }}
                 >
                   <td className="px-4 py-3">
-                    <input type="checkbox" className="accent-indigo-500 w-3.5 h-3.5" />
+                    <input 
+                      type="checkbox" 
+                      className="accent-indigo-500 w-4 h-4 rounded cursor-pointer transition-all hover:scale-110" 
+                    />
                   </td>
-                  <td className="px-4 py-3" style={{ color: "var(--color-text-muted)" }}>{product.sku}</td>
+                  <td className="px-4 py-3 font-mono text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+                    {product.sku || `SKU-${product.id?.slice(0, 6).toUpperCase()}`}
+                  </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       <div
-                        className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-sm"
+                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm overflow-hidden"
                         style={{ background: "var(--color-surface-3)" }}
                       >
-                        {product.img ? <img src={product.img} className="w-full h-full rounded-md object-cover" alt="" /> : "📦"}
+                        {product.img ? 
+                          <img src={product.img} className="w-full h-full rounded-lg object-cover" alt="" /> : 
+                          "📦"
+                        }
                       </div>
-                      <span className="font-medium truncate max-w-[120px]" style={{ color: "var(--color-text-primary)" }}>
+                      <span className="font-medium truncate max-w-[140px]" style={{ color: "var(--color-text-primary)" }}>
                         {product.product_name}
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3" style={{ color: "var(--color-text-secondary)" }}>{product.categoryName}</td>
-                  <td className="px-4 py-3 font-medium" style={{ color: "var(--color-text-primary)" }}>
+                  <td className="px-4 py-3" style={{ color: "var(--color-text-secondary)" }}>
+                    {product.categoryName || "Uncategorized"}
+                  </td>
+                  <td className="px-4 py-3 font-semibold" style={{ color: "var(--color-text-primary)" }}>
                     ${Number(product.product_Price).toFixed(2)}
                   </td>
-                  <td className="px-4 py-3 font-medium" style={{ color: "var(--color-text-primary)" }}>
+                  <td className="px-4 py-3 font-semibold" style={{ color: "var(--color-text-primary)" }}>
                     {product.product_Qty}
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className="px-2 py-1 rounded-md text-[10px] font-semibold"
-                      style={{ background: status.bg, color: status.text, border: `1px solid ${status.border}` }}
+                      className="px-2.5 py-1 rounded-full text-[10px] font-semibold inline-flex items-center gap-1"
+                      style={{ 
+                        background: status.bg, 
+                        color: status.text, 
+                        border: `1px solid ${status.border}` 
+                      }}
                     >
+                      {status.label === "Out of Stock" && <MdError size={10} />}
+                      {status.label === "Low Stock" && <MdWarning size={10} />}
+                      {status.label === "In Stock" && <MdCheckCircle size={10} />}
                       {status.label}
                     </span>
                   </td>
@@ -769,30 +1070,33 @@ export const ProductsTable = ({ onEdit, onAdd,onSell, readOnly = false, products
                     {readOnly ? (
                       <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>View only</span>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        {/* ✅ Sell Button - New */}
-                    
+                      <div className="flex items-center gap-1.5">
                         {onSell && product.product_Qty > 0 && !readOnly && (
                           <button
                             onClick={() => onSell(product)}
-                            className="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-green-500/10"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg transition-all hover:scale-110 hover:bg-green-500/10"
                             style={{ color: "var(--color-success)" }}
                             title="Sell product"
                           >
-                            <MdAttachMoney size={12} />
+                            <MdAttachMoney size={14} />
                           </button>
                         )}
                         {onEdit && (
                           <button
                             onClick={() => onEdit(product.id)}
-                            className="w-6 h-6 flex items-center justify-center rounded"
-                            style={{ color: "var(--color-text-muted)" }}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg transition-all hover:scale-110 hover:bg-blue-500/10"
+                            style={{ color: "var(--color-brand-primary-soft)" }}
+                            title="Edit product"
                           >
-                            <FiEdit2 size={12} />
+                            <FiEdit2 size={14} />
                           </button>
                         )}
-                        <button className="w-6 h-6 flex items-center justify-center rounded" style={{ color: "var(--color-text-muted)" }}>
-                          <FiMoreHorizontal size={12} />
+                        <button 
+                          className="w-7 h-7 flex items-center justify-center rounded-lg transition-all hover:bg-surface-3" 
+                          style={{ color: "var(--color-text-muted)" }}
+                          title="More options"
+                        >
+                          <FiMoreHorizontal size={14} />
                         </button>
                       </div>
                     )}
@@ -804,29 +1108,43 @@ export const ProductsTable = ({ onEdit, onAdd,onSell, readOnly = false, products
         </table>
       </div>
 
-      {/* Pagination */}
+      {/* Enhanced Pagination */}
       <div
-        className="flex items-center justify-between px-4 py-3 text-xs"
+        className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 text-xs"
         style={{
           borderTop: "1px solid var(--color-border-subtle)",
           color: "var(--color-text-muted)",
         }}
       >
-        <span>Showing 1 to {Math.min(PAGE_SIZE, products.length)} of {products.length} products</span>
+        <span>
+          Showing <strong style={{ color: "var(--color-text-primary)" }}>1</strong> to{" "}
+          <strong style={{ color: "var(--color-text-primary)" }}>{Math.min(PAGE_SIZE, products.length)}</strong> of{" "}
+          <strong style={{ color: "var(--color-text-primary)" }}>{products.length}</strong> products
+        </span>
         <div className="flex items-center gap-1">
-          {["‹", "1", "2", "3", "4", "5", "...", "9", "›"].map((p, i) => (
+          <button className="w-8 h-8 flex items-center justify-center rounded-lg transition-all hover:bg-surface-3 disabled:opacity-30" disabled>
+            ‹
+          </button>
+          {["1", "2", "3", "4", "5", "…", "9"].map((p, i) => (
             <button
               key={i}
-              className="w-7 h-7 flex items-center justify-center rounded text-xs font-medium transition-colors"
+              className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-medium transition-all ${
+                p === "1" 
+                  ? "hover:scale-105" 
+                  : "hover:bg-surface-3"
+              }`}
               style={
                 p === "1"
-                  ? { background: "var(--color-brand-primary)", color: "white" }
+                  ? { background: "var(--color-brand-primary)", color: "white", boxShadow: "var(--shadow-glow)" }
                   : { color: "var(--color-text-muted)" }
               }
             >
               {p}
             </button>
           ))}
+          <button className="w-8 h-8 flex items-center justify-center rounded-lg transition-all hover:bg-surface-3">
+            ›
+          </button>
         </div>
       </div>
     </div>

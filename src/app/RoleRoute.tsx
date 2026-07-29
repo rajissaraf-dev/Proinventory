@@ -12,32 +12,32 @@ interface RoleRouteProps {
  * RoleRoute — gates a route by role.
  *
  * Rules:
- * - While auth status is "loading" (profile fetch in progress) → show spinner
- * - super_admin always passes through
- * - guest role is treated identically to company_owner
+ * - While auth status is "loading" → show spinner
+ * - company_owner always passes through (they are the super admin)
+ * - company_admin passes through for management routes
+ * - staff is restricted to their assigned warehouse
  */
 const RoleRoute = ({ allow, redirectTo = "/dashboard" }: RoleRouteProps) => {
   const user       = useAppSelector((s) => s.auth.user);
   const profile    = useAppSelector((s) => s.auth.profile);
   const authStatus = useAppSelector((s) => s.auth.status);
 
-  // Wait for the authoritative profile role before making a route decision.
+  // Wait for the authoritative profile role
   const role = (profile?.role as UserRole | undefined) ?? (user?.role as UserRole | undefined);
 
   if (!role && authStatus === "loading") {
     return <LoadingSpinner />;
   }
 
-  // No role resolved at all yet — wait
+  // No role resolved yet — wait
   if (!role && authStatus === "idle") {
     return <LoadingSpinner />;
   }
 
   const effectiveRole = role ?? "staff";
 
-  const permitted =
-    effectiveRole === "super_admin" ||  // super admin bypasses all guards
-    allow.includes(effectiveRole);
+  // Allow if role is in the allow list
+  const permitted = allow.includes(effectiveRole);
 
   return permitted
     ? <Outlet />

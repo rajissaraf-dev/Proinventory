@@ -2,35 +2,32 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { Notification } from "../services/notification.service";
 import {
-  MdDashboard, MdPeople, MdCreditCard,
+  MdDashboard, MdPeople,
   MdWarehouse, MdCategory, MdInventory2,
   MdSwapHoriz, MdAdd, MdBlock, MdCheckCircle,
   MdDelete, MdClose, MdRefresh,
   MdAttachMoney, MdRemoveShoppingCart, MdShoppingCart,
   MdNotifications,
+  MdLock,
 } from "react-icons/md";
-import { FaCheck } from "react-icons/fa";
+// import { FaCheck } from "react-icons/fa";
 import { FiTrash2 } from "react-icons/fi";
 
 import useAppSelector    from "../hooks/useAppSelector";
 import useRole           from "../hooks/useRole";
-import useCompanyAccess  from "../hooks/useCompanyAccess";
+// import useCompanyAccess  from "../hooks/useCompanyAccess";
 
 import { CompanyUserService }   from "../services/company-user.service";
-import { SubscriptionService }  from "../services/subscription.service";
 import { WarehouseService }     from "../services/warehouse.service";
 import { CategoryService }      from "../services/category.service";
 import { InventoryService }     from "../services/inventory.service";
 import { TransferService }      from "../services/transfer.service";
 import { StockMovementService } from "../services/stock-movement.service";
-import { NotificationService }  from "../services/notification.service"; // ✅ Added import
-
-import TrialBanner   from "../components/ui/TrialBanner";
-import UpgradePrompt from "../components/ui/UpgradePrompt";
+import { NotificationService }  from "../services/notification.service";
 
 import {
-  CompanyUser, UserRole, SubscriptionPlan,
-  PLANS, Warehouse, Category, Transfer, StockMovement,
+  CompanyUser, UserRole,
+  Warehouse, Category, Transfer, StockMovement,
   InventoryRecord, FirebaseTimestamp, UserStatus, Product,
 } from "../types";
 
@@ -47,7 +44,9 @@ import { SaleModal } from "../components/dashboard/SaleModal";
 import { OrderModal } from "../components/dashboard/OrderModal";
 import { StockStateEditor } from "../components/dashboard/StockStateEditor";
 
-type OTab = "dashboard" | "staff" | "warehouses" | "categories" | "transfers" | "movements" | "plan" | "notifications";
+// ─── REMOVED: MdCreditCard import ───
+
+type OTab = "dashboard" | "staff" | "warehouses" | "categories" | "transfers" | "movements" | "notifications";
 type DView = "dashboard"|"add-product";
 type AddStaffForm = {
   displayName: string;
@@ -218,7 +217,8 @@ const OwnerDashboardPage = () => {
   const products           = useAppSelector(s=>s.stock.productData);
   const location           = useLocation();
   const { profile, isOwner, canDeleteProduct, hasWarehouseScope, assignedWarehouseId } = useRole();
-  const { hasAccess, isTrial, daysLeft, isGuest } = useCompanyAccess();
+  // ─── REMOVED: isTrial, daysLeft, isGuest from useCompanyAccess ───
+  // const { hasAccess } = useCompanyAccess();
 
   const canViewWarehouse = (
     warehouseId: string, 
@@ -325,7 +325,8 @@ const [showOrderModal, setShowOrderModal] = useState(false);
 
   useEffect(() => {
     const tabParam = new URLSearchParams(location.search).get("tab");
-    const allowedTabs: OTab[] = ["dashboard", "staff", "warehouses", "categories", "transfers", "movements", "plan"];
+    // ─── REMOVED: "plan" from allowedTabs ───
+    const allowedTabs: OTab[] = ["dashboard", "staff", "warehouses", "categories", "transfers", "movements", "notifications"];
     if (tabParam && allowedTabs.includes(tabParam as OTab)) {
       setOTab(tabParam as OTab);
     }
@@ -376,8 +377,7 @@ const [showOrderModal, setShowOrderModal] = useState(false);
   const totalValue = displayedProducts.reduce((a,p)=>a+((p.stockQuantity ?? p.product_Qty ?? 0)*(p.price ?? p.product_Price ?? 0)),0);
   const totalStock = displayedProducts.reduce((a,p)=>a+(p.stockQuantity ?? p.product_Qty ?? 0),0);
   const outOfStock = displayedProducts.filter(p=>(p.stockQuantity ?? p.product_Qty ?? 0)===0).length;
-  // Get warehouse-specific stock for the product being edited
-  // Get warehouse-specific stock for the product being edited
+  
 const editItem = products.find(p => p.id === editId);
 const editItemWarehouseStock = editItem ? 
   (warehouseInventory[previewWarehouseId]?.find(i => i.productId === editItem.id)?.quantity ?? editItem.stockQuantity ?? 0) 
@@ -394,7 +394,6 @@ const loadNotifications = useCallback(async (cid = companyId) => {
     setNotificationCount(count);
   } catch (error) {
     console.error("Failed to load notifications:", error);
-    // Don't update count on error - keep existing value
   }
 }, [companyId]);
 
@@ -474,12 +473,9 @@ const loadNotifications = useCallback(async (cid = companyId) => {
 // SALE HANDLERS
 // ============================================================
 const handleSellProduct = (product: Product) => {
-  // ✅ Check if user is staff with warehouse scope
   if (hasWarehouseScope && assignedWarehouseId) {
-    // Staff can ONLY sell from their assigned warehouse
     const currentWarehouseId = previewWarehouseId;
     
-    // If the current preview warehouse is not the assigned warehouse, block the sale
     if (currentWarehouseId !== assignedWarehouseId) {
       const assignedWarehouse = warehouses.find(w => w.id === assignedWarehouseId);
       alert(`You can only sell products from your assigned warehouse: "${assignedWarehouse?.name || assignedWarehouseId}". Please switch to your warehouse.`);
@@ -487,12 +483,10 @@ const handleSellProduct = (product: Product) => {
     }
   }
   
-  // Get the current warehouse where the product is being viewed
   const warehouseId = previewWarehouseId;
   const warehouse = warehouses.find(w => w.id === warehouseId);
   const warehouseName = warehouse?.name || warehouseId;
   
-  // Get stock for this specific warehouse
   const inventoryItems = warehouseInventory[warehouseId] || [];
   const inventoryItem = inventoryItems.find((i: InventoryRecord) => i.productId === product.id);
   const stockInWarehouse = inventoryItem?.quantity || 0;
@@ -557,7 +551,6 @@ const loadPendingOrders = useCallback(async (cid = companyId) => {
   if (!cid) return;
   try {
     const { OrderService } = await import("../services/order.service");
-    // Get pending orders count for the current warehouse
     const count = await OrderService.getPendingCount(cid, previewWarehouseId);
     setPendingOrders(count);
   } catch (error) {
@@ -578,7 +571,6 @@ const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
     setTransferLoadingMore(true);
   } else {
     setTrfLoading(true);
-    // Removed setTransferPage(1);
     setAllTransfersLoaded(false);
   }
   
@@ -615,7 +607,6 @@ const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
    
     const received = scopedTransfers.filter((transfer) => transfer.status === "completed").length;
 
-    // Removed setTransferAlerts(pending);
     setTransferMessages(received);
   } catch (error) {
     console.error("Failed to load transfers:", error);
@@ -686,24 +677,15 @@ const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
     if (!companyId) return;
     
     try {
-      // Reload warehouses and inventory
       await loadWarehouses();
-      
-      // Reload transfers
       await loadTransfers();
-      
-      // Reload movements
       await loadMovements();
-      
-      // Reload notifications
       await loadNotifications();
       
-      // If notifications tab is open, reload the list
       if (oTab === "notifications") {
         await loadNotificationsList(companyId, false);
       }
       
-      // Force a re-render of the products preview
       if (previewWarehouseId) {
         setSelectedWarehouseId(() => previewWarehouseId);
       }
@@ -718,13 +700,11 @@ const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
 const markNotificationAsRead = async (notificationId: string) => {
   try {
     await NotificationService.markAsRead(companyId, notificationId);
-    // Update local state
     setNotifications(prev => 
       prev.map(n => 
         n.id === notificationId ? { ...n, status: 'read' } : n
       )
     );
-    // Refresh count
     const count = await NotificationService.getUnreadCount(companyId);
     setNotificationCount(count);
   } catch (error) {
@@ -735,7 +715,6 @@ const markNotificationAsRead = async (notificationId: string) => {
 const markAllNotificationsAsRead = async () => {
   try {
     await NotificationService.markAllAsRead(companyId);
-    // Update local state
     setNotifications(prev => 
       prev.map(n => ({ ...n, status: 'read' }))
     );
@@ -795,7 +774,7 @@ const getTimeAgo = (date: Date): string => {
   }
   
   loadNotifications();
-  loadPendingOrders(); // ✅ Add this
+  loadPendingOrders();
   
 }, [oTab, companyId]);
 
@@ -948,7 +927,6 @@ const getTimeAgo = (date: Date): string => {
     
     console.log("✅ Transfer created successfully!");
     
-    // Reset form
     setTransferForm({ 
       fromWarehouseId: "", 
       toWarehouseId: "", 
@@ -957,17 +935,13 @@ const getTimeAgo = (date: Date): string => {
       notes: "" 
     });
     
-    // ✅ IMPORTANT: Refresh ALL data after transfer
     await Promise.all([
       loadTransfers(),
       refreshProductsPreview(),
-      // ✅ Refresh notifications count
       loadNotifications(),
-      // ✅ If notifications tab is open, refresh the list
       oTab === "notifications" ? loadNotificationsList(companyId, false) : Promise.resolve()
     ]);
     
-    // ✅ Show success message
     console.log("✅ All data refreshed after transfer");
     
   } catch (err: unknown) {
@@ -986,13 +960,10 @@ const getTimeAgo = (date: Date): string => {
       await TransferService.updateStatus(companyId, id, status);
     }
     
-    // ✅ Refresh ALL data after transfer update
     await Promise.all([
       loadTransfers(),
       refreshProductsPreview(),
-      // ✅ Refresh notifications count
       loadNotifications(),
-      // ✅ If notifications tab is open, refresh the list
       oTab === "notifications" ? loadNotificationsList(companyId, false) : Promise.resolve()
     ]);
     
@@ -1004,11 +975,7 @@ const getTimeAgo = (date: Date): string => {
 
   const canCreateTransfer = isOwner || hasWarehouseScope;
 
-  /* ── Plan ── */
-  const updatePlan = async(plan:SubscriptionPlan)=>{
-    await SubscriptionService.upgrade(companyId,plan);
-  };
-
+  // ─── UPDATED TABS: Removed "plan" ───
   const TABS: { id: OTab; icon: React.ReactNode; label: string }[] = [
   { id: "dashboard", icon: <MdDashboard size={15} />, label: "Dashboard" },
   ...(isOwner ? [{ id: "staff" as OTab, icon: <MdPeople size={15} />, label: "Staff" }] : []),
@@ -1016,14 +983,12 @@ const getTimeAgo = (date: Date): string => {
   { id: "categories", icon: <MdCategory size={15} />, label: "Categories" },
   { id: "transfers", icon: <MdSwapHoriz size={15} />, label: "Transfers" },
   { id: "movements", icon: <MdInventory2 size={15} />, label: "Stock Log" },
-  { id: "notifications", icon: <MdNotifications size={15} />, label: "Notifications" }, // ✅ Added
-  ...(isOwner ? [{ id: "plan" as OTab, icon: <MdCreditCard size={15} />, label: "Subscription" }] : []),
+  { id: "notifications", icon: <MdNotifications size={15} />, label: "Notifications" },
 ];
 
   return (
     <div className="min-h-screen" style={{ background:"var(--color-bg-app)" }}>
     <DashboardSidebar
-      onNewItem={() => { setOTab("dashboard"); setDView("add-product"); }}
       collapsed={sideCol}
       onToggleCollapse={() => setSideCol(p => !p)}
       activeView={dView === "add-product" ? "add-product" : "dashboard"}
@@ -1034,21 +999,21 @@ const getTimeAgo = (date: Date): string => {
         window.history.pushState(null, "", "?tab=notifications");
       }}
     />
-      <DashboardHeader 
-        onMenuClick={() => setSideCol(p => !p)}
-        notificationCount={notificationCount}
-        onNotificationClick={() => {
-          setOTab("notifications");
-          // Also update URL
-          window.history.pushState(null, "", "?tab=notifications");
-        }}
-      />
+  
 
-      <main className="transition-all duration-300 pt-14 min-h-screen"
+      <main className="transition-all duration-300 pt-14 min-h-screen relative"
         style={{ marginLeft:`${sideW}px` }}>
 
-        {/* ── Trial banner ── */}
-        <TrialBanner/>
+      
+        <DashboardHeader 
+          onMenuClick={() => setSideCol(p => !p)}
+          notificationCount={notificationCount}
+          onNotificationClick={() => {
+            setOTab("notifications");
+            window.history.pushState(null, "", "?tab=notifications");
+          }}
+          isSidebarCollapsed={sideCol}  // ← THIS MUST BE PASSED
+        />
 
         {/* ── Tab bar ── */}
         <div className="flex items-center gap-0.5 px-5 pt-4 pb-0 overflow-x-auto"
@@ -1121,33 +1086,71 @@ const getTimeAgo = (date: Date): string => {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                  <StatCard title="Total Inventory Value" value={`$${totalValue.toLocaleString("en-US",{minimumFractionDigits:2})}`} change={5.2} sparkData={SPARKS.value} sparkColor="var(--color-chart-indigo)" iconBg="var(--color-nav-active-bg)" icon={<MdAttachMoney size={18} style={{color:"var(--color-brand-primary-soft)"}}/>}/>
-                  <StatCard title="Stock on Hand"        value={totalStock.toLocaleString()} change={3.7} sparkData={SPARKS.stock} sparkColor="var(--color-chart-green)" iconBg="var(--color-stock-in-soft)" icon={<MdInventory2 size={18} style={{color:"var(--color-stock-in)"}}/>}/>
-                  <StatCard title="Out of Stock"         value={String(outOfStock)} change={-12.4} sparkData={SPARKS.out} sparkColor="var(--color-chart-red)" iconBg="var(--color-stock-out-soft)" icon={<MdRemoveShoppingCart size={18} style={{color:"var(--color-stock-out)"}}/>}/>
-                  <StatCard 
-                    title="Pending Orders" 
-                    value={String(pendingOrders)} 
-                    change={0} 
-                    sparkData={SPARKS.orders} 
-                    sparkColor="var(--color-chart-purple)" 
-                    iconBg="var(--color-order-pending-soft)" 
-                    icon={<MdShoppingCart size={18} style={{color:"var(--color-order-pending)"}}/>}
-                  />
-                </div>
+                {/* ── Stat Cards ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              
+              {/* ── Total Inventory Value (Restricted for Staff) ── */}
+              <StatCard 
+                title="Total Inventory Value" 
+                value={
+                  isOwner
+                    ? `$${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                    : "🔒 Restricted"
+                } 
+                change={isOwner ? 5.2 : undefined} 
+                sparkData={isOwner ? SPARKS.value : undefined} 
+                sparkColor={isOwner ? "var(--color-chart-indigo)" : undefined} 
+                iconBg={isOwner ? "var(--color-nav-active-bg)" : "var(--color-surface-3)"} 
+                icon={
+                  isOwner ? (
+                    <MdAttachMoney size={18} style={{ color: "var(--color-brand-primary-soft)" }} />
+                  ) : (
+                    <MdLock size={18} style={{ color: "var(--color-text-faint)" }} />
+                  )
+                }
+              />
+              
+              <StatCard 
+                title="Stock on Hand" 
+                value={totalStock.toLocaleString()} 
+                change={3.7} 
+                sparkData={SPARKS.stock} 
+                sparkColor="var(--color-chart-green)" 
+                iconBg="var(--color-stock-in-soft)" 
+                icon={<MdInventory2 size={18} style={{ color: "var(--color-stock-in)" }} />} 
+              />
+              
+              <StatCard 
+                title="Out of Stock" 
+                value={String(outOfStock)} 
+                change={-12.4} 
+                sparkData={SPARKS.out} 
+                sparkColor="var(--color-chart-red)" 
+                iconBg="var(--color-stock-out-soft)" 
+                icon={<MdRemoveShoppingCart size={18} style={{ color: "var(--color-stock-out)" }} />} 
+              />
+              
+              <StatCard 
+                title="Pending Orders" 
+                value={String(pendingOrders)} 
+                change={0} 
+                sparkData={SPARKS.orders} 
+                sparkColor="var(--color-chart-purple)" 
+                iconBg="var(--color-order-pending-soft)" 
+                icon={<MdShoppingCart size={18} style={{ color: "var(--color-order-pending)" }} />} 
+              />
+            </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   <div className="lg:col-span-2"><InventoryTurnoverChart productsOverride={displayedProducts}/></div>
                   <CategoryDonutChart productsOverride={displayedProducts}/>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* <LowStockPanel warehouseId={previewWarehouseId} /> */}
                   <LowStockPanel 
                   productsOverride={displayedProducts} 
                   warehouseId={previewWarehouseId}
-                  warehouseInventory={warehouseInventory} // ✅ Pass the inventory data
+                  warehouseInventory={warehouseInventory}
                 />
                   <RecentActivityPanel warehouseId={previewWarehouseId} />
-                  {/* <LowStockPanel/><RecentActivityPanel/> */}
                 </div>
                 <ProductsTable onEdit={id=>setEditId(id)} onAdd={()=>setDView("add-product")} onSell={handleSellProduct} productsOverride={displayedProducts}/>
               </div>
@@ -1155,7 +1158,6 @@ const getTimeAgo = (date: Date): string => {
 
         {/* ══ STAFF TAB ══ */}
         {oTab === "staff" && (
-          !hasAccess ? <UpgradePrompt /> :
           <div className="p-5">
             <div className="flex items-center justify-between mb-5">
               <h1 className="text-xl font-bold" style={{ color: "var(--color-text-primary)" }}>Staff Management</h1>
@@ -1249,7 +1251,6 @@ const getTimeAgo = (date: Date): string => {
 
         {/* ══ WAREHOUSES TAB ══ */}
         {oTab === "warehouses" && (
-          !hasAccess ? <UpgradePrompt /> :
           <div className="p-5">
             <div className="flex items-center justify-between mb-5">
               <div>
@@ -1504,7 +1505,6 @@ const getTimeAgo = (date: Date): string => {
 
         {/* ══ CATEGORIES TAB ══ */}
         {oTab === "categories" && (
-          !hasAccess ? <UpgradePrompt /> :
           <div className="p-5">
             <div className="flex items-center justify-between mb-5">
               <h1 className="text-xl font-bold" style={{ color: "var(--color-text-primary)" }}>Product Categories</h1>
@@ -1552,7 +1552,6 @@ const getTimeAgo = (date: Date): string => {
 
         {/* ══ TRANSFERS TAB ══ */}
         {oTab === "transfers" && (
-          !hasAccess ? <UpgradePrompt /> :
           <div className="p-5">
             <div className="flex flex-wrap items-center justify-between mb-5 gap-3">
               <div>
@@ -1799,7 +1798,6 @@ const getTimeAgo = (date: Date): string => {
 
         {/* ══ STOCK LOG TAB ══ */}
         {oTab === "movements" && (
-          !hasAccess ? <UpgradePrompt /> :
           <div className="p-5">
             <div className="flex flex-wrap items-center justify-between mb-5 gap-3">
               <div>
@@ -1958,7 +1956,6 @@ const getTimeAgo = (date: Date): string => {
 
      {/* ══ NOTIFICATIONS TAB ══ */}
 {oTab === "notifications" && (
-  !hasAccess ? <UpgradePrompt /> :
   <div className="p-5">
     <div className="flex flex-wrap items-center justify-between mb-5 gap-3">
       <div>
@@ -1974,7 +1971,6 @@ const getTimeAgo = (date: Date): string => {
           Stay updated with all your inventory activities and transfer requests
         </p>
       </div>
-      {/* Add this in the Notifications tab header */}
 <div className="flex items-center gap-2 flex-wrap">
   {notificationCount > 0 && (
     <button
@@ -1989,7 +1985,6 @@ const getTimeAgo = (date: Date): string => {
     </button>
   )}
   
-  {/* ✅ Debug button to check notifications */}
   <button
     onClick={async () => {
       console.log("🔍 Debugging notifications...");
@@ -1999,7 +1994,6 @@ const getTimeAgo = (date: Date): string => {
         console.log("📊 Total count:", result.totalCount);
         const count = await NotificationService.getUnreadCount(companyId);
         console.log("📊 Unread count:", count);
-        // Force refresh
         await loadNotificationsList(companyId, false);
         await loadNotifications();
         alert(`Found ${result.notifications.length} notifications (${count} unread)`);
@@ -2059,7 +2053,6 @@ const getTimeAgo = (date: Date): string => {
           const createdAt = notification.createdAt?.toDate?.() || new Date(notification.createdAt);
           const timeAgo = getTimeAgo(createdAt);
 
-          // Get icon and color based on type
           const getIconAndColor = () => {
             switch (notification.type) {
               case 'transfer_request':
@@ -2090,7 +2083,6 @@ const getTimeAgo = (date: Date): string => {
                 if (isUnread) {
                   markNotificationAsRead(notification.id);
                 }
-                // If it's a transfer notification, navigate to transfers tab
                 if (notification.type === 'transfer_request' || 
                     notification.type === 'transfer_completed' || 
                     notification.type === 'transfer_cancelled') {
@@ -2099,12 +2091,10 @@ const getTimeAgo = (date: Date): string => {
               }}
             >
               <div className="flex items-start gap-3">
-                {/* Icon */}
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${bg}`}>
                   <span style={{ color }}>{icon}</span>
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -2118,12 +2108,10 @@ const getTimeAgo = (date: Date): string => {
                         )}
                       </p>
                       
-                      {/* Message with line breaks */}
                       <p className="text-xs mt-1 whitespace-pre-line" style={{ color: "var(--color-text-secondary)" }}>
                         {notification.message}
                       </p>
                       
-                      {/* Show transfer details */}
                       {notification.fromWarehouse && notification.toWarehouse && (
                         <div className="mt-2 flex items-center gap-2 text-[10px] flex-wrap">
                           <span className="px-2 py-0.5 rounded" style={{ background: "var(--color-surface-3)", color: "var(--color-text-muted)" }}>
@@ -2141,7 +2129,6 @@ const getTimeAgo = (date: Date): string => {
                         </div>
                       )}
                       
-                      {/* Show notes if present */}
                       {notification.notes && notification.notes.trim() && (
                         <div className="mt-2 text-[10px] p-2 rounded"
                           style={{ background: "var(--color-surface-3)", color: "var(--color-text-secondary)" }}>
@@ -2149,7 +2136,6 @@ const getTimeAgo = (date: Date): string => {
                         </div>
                       )}
                       
-                      {/* Show items */}
                       {notification.items && notification.items.length > 0 && (
                         <div className="mt-2 text-[10px] flex flex-wrap gap-1">
                           {notification.items.map((item: { productName: string; quantity: number }, i: number) => (
@@ -2171,7 +2157,6 @@ const getTimeAgo = (date: Date): string => {
           );
         })}
 
-        {/* Load More */}
         {notificationHasMore && !allNotificationsLoaded && (
           <div className="text-center py-4">
             <button
@@ -2193,69 +2178,8 @@ const getTimeAgo = (date: Date): string => {
   </div>
 )}
 
-        {/* ══ SUBSCRIPTION TAB ══ */}
-        {oTab === "plan" && (
-          <div className="p-5">
-            {isTrial && !isGuest && (
-              <div className="mb-6 px-5 py-4 rounded-xl flex items-center justify-between"
-                style={{ background: "var(--color-info-soft)", border: "1px solid var(--color-info-border)" }}>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: "var(--color-info)" }}>
-                    You are on a free trial
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>
-                    {daysLeft != null && daysLeft > 0
-                      ? `${daysLeft} day${daysLeft !== 1 ? "s" : ""} remaining — subscribe to keep full access after trial ends.`
-                      : "Your trial has expired. Select a plan below to continue."}
-                  </p>
-                </div>
-                <span className="text-2xl font-extrabold ml-4" style={{ color: "var(--color-info)" }}>{daysLeft ?? 0}d</span>
-              </div>
-            )}
-            {isGuest && (
-              <div className="mb-6 px-5 py-4 rounded-xl"
-                style={{ background: "var(--color-stock-in-soft)", border: "1px solid var(--color-stock-in-border)" }}>
-                <p className="text-sm font-semibold" style={{ color: "var(--color-stock-in)" }}>You are on a Guest Demo account</p>
-                <p className="text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>Guest accounts have permanent full access. Register a company account to manage a real business.</p>
-              </div>
-            )}
-            <h1 className="text-xl font-bold mb-1" style={{ color: "var(--color-text-primary)" }}>Choose a Plan</h1>
-            <p className="text-xs mb-6" style={{ color: "var(--color-text-muted)" }}>
-              Current plan:{" "}
-              <span className="font-semibold capitalize" style={{ color: "var(--color-brand-primary-soft)" }}>
-                {company?.plan?.replace("_", " ") ?? "Starter"}
-              </span>
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {PLANS.map(plan => {
-                const active = company?.plan === plan.id;
-                return (
-                  <div key={plan.id} className="relative flex flex-col rounded-2xl p-6"
-                    style={{ background: plan.highlighted ? "linear-gradient(160deg,#1e1b4b,#1a2238)" : "var(--color-surface-1)", border: active ? "2px solid var(--color-brand-primary-soft)" : plan.highlighted ? "1px solid var(--color-border-brand-strong)" : "1px solid var(--color-border-soft)", boxShadow: plan.highlighted ? "var(--shadow-glow)" : "none" }}>
-                    {plan.badge && <div className="absolute -top-3.5 left-1/2 -translate-x-1/2"><span className="px-4 py-1 rounded-full text-xs font-bold" style={{ background: "var(--color-brand-primary)", color: "white" }}>{plan.badge}</span></div>}
-                    {active && <div className="absolute -top-3.5 right-4"><span className="px-3 py-1 rounded-full text-xs font-bold" style={{ background: "var(--color-stock-in-soft)", color: "var(--color-stock-in)" }}>Current</span></div>}
-                    <p className="text-sm font-semibold mb-1" style={{ color: plan.highlighted ? "var(--color-brand-primary-soft)" : "var(--color-text-muted)" }}>{plan.name}</p>
-                    <div className="mb-5"><span className="text-4xl font-extrabold" style={{ color: "var(--color-text-primary)" }}>${plan.price}</span><span className="text-sm ml-1" style={{ color: "var(--color-text-muted)" }}>/{plan.period}</span></div>
-                    <div className="h-px mb-4" style={{ background: "var(--color-border-soft)" }} />
-                    <ul className="flex-1 space-y-2.5 mb-5">
-                      {plan.features.map(f => (
-                        <li key={f.label} className="flex items-center gap-2 text-xs">
-                          <FaCheck className="shrink-0 text-[10px]" style={{ color: f.included ? "var(--color-success)" : "var(--color-text-faint)" }} />
-                          <span style={{ color: f.included ? "var(--color-text-secondary)" : "var(--color-text-faint)" }}>{f.label}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <button onClick={() => updatePlan(plan.id)} disabled={active}
-                      className="w-full py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
-                      style={active ? { background: "var(--color-stock-in-soft)", color: "var(--color-stock-in)" } : plan.highlighted ? { background: "var(--color-brand-primary)", color: "white" } : { background: "transparent", color: "var(--color-text-primary)", border: "1px solid var(--color-border-medium)" }}>
-                      {active ? "✓ Active Plan" : `Subscribe to ${plan.name}`}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* ═══ REMOVED: SUBSCRIPTION TAB ─── */}
+
       </main>
 
       {/* FAB */}
@@ -2281,9 +2205,7 @@ const getTimeAgo = (date: Date): string => {
       canDelete={canDeleteProduct}
       onClose={() => setEditId(null)}
       onUpdateComplete={() => {
-        // Refresh data after update
         loadWarehouses();
-        // Force a re-render of the products preview
         if (previewWarehouseId) {
           setSelectedWarehouseId(previewWarehouseId);
         }
@@ -2299,30 +2221,18 @@ const getTimeAgo = (date: Date): string => {
   </div>
 )}
 
-{/* ✅ Sale Modal */}
 {selectedProductForSale && (
   <SaleModal
     product={selectedProductForSale.product}
     companyId={companyId}
     warehouseId={selectedProductForSale.warehouseId}
     warehouseName={selectedProductForSale.warehouseName}
-    availableStock={selectedProductForSale.availableStock} // ✅ Pass available stock
+    availableStock={selectedProductForSale.availableStock}
     onClose={() => setSelectedProductForSale(null)}
     onSaleComplete={refreshAllData}
   />
 )}
 
-
-{/* Add a button to create orders */}
-<button
-  onClick={() => setShowOrderModal(true)}
-  className="px-4 py-2 rounded-xl text-sm font-semibold"
-  style={{ background: "var(--color-brand-primary)", color: "white" }}
->
-  + New Order
-</button>
-
-{/* Order Modal */}
 {showOrderModal && (
   <OrderModal
     companyId={companyId}

@@ -345,8 +345,8 @@ const handleSell = (product: Product) => {
               <div className="flex gap-2">
                 <button
                   onClick={handleMultiSell}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-80"
-                  style={{ background: "var(--color-brand-primary-soft)", color: "var(--color-brand-primary)" }}
+                  className="flex items-center bg-white gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-all hover:opacity-80"
+                  style={{ color: "var(--color-brand-primary)" }}
                 >
                   <MdShoppingCart size={18} /> Multi-Sell
                 </button>

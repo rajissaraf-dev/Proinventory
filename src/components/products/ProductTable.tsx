@@ -115,9 +115,8 @@ const ProductTable = ({
           {onMultiSell && canEdit && (
             <button
               onClick={onMultiSell}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-80"
+              className="flex items-center bg-white cursor-pointer gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-80"
               style={{
-                background: "var(--color-brand-primary-soft)",
                 color: "var(--color-brand-primary)",
                 border: "1px solid var(--color-border-brand)",
               }}

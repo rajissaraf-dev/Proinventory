@@ -391,9 +391,19 @@ useEffect(() => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-2xl rounded-2xl p-6 max-h-[95vh] overflow-y-auto"
-        style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border-brand)", boxShadow: "var(--shadow-card)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ">
+ 
+      <div className="w-full max-w-2xl rounded-2xl p-6 max-h-[95vh] overflow-y-auto scrollbar-hide"
+        style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border-brand)", boxShadow: "var(--shadow-card)",
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+  }}
+        >
+             <style>{`
+      .modal-scroll::-webkit-scrollbar {
+        display: none;
+      }
+    `}</style>
         
         {/* ─── Header ─── */}
         <div className="flex items-center justify-between mb-4">

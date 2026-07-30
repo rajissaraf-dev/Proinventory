@@ -115,11 +115,24 @@ export const SaleModal = ({
   const availableProducts = getAvailableProducts();
 
   // ─── Get stock for a product in a warehouse ───
+  // NOTE: warehouseInventory is only populated in multi-product mode.
+  // In single-product mode it's an empty object ({}), so we must fall back
+  // to the value already captured on the cart item (maxStock), which was
+  // itself correctly derived from `initialAvailableStock` when added.
+  // Without this fallback, single-product sales always read stock as 0.
   const getProductStock = (productId: string, warehouseId: string): number => {
-    const inventory = warehouseInventory[warehouseId] || [];
-    // ─── FIXED: Properly typed find ───
-    const item = inventory.find((i: InventoryRecord) => i.productId === productId);
-    return item?.quantity || 0;
+    const inventory = warehouseInventory[warehouseId];
+    if (inventory && inventory.length > 0) {
+      const found = inventory.find((i: InventoryRecord) => i.productId === productId);
+      if (found) return found.quantity ?? 0;
+    }
+
+    const cartItem = cartItems.find(
+      (c) => c.productId === productId && c.warehouseId === warehouseId
+    );
+    if (cartItem) return cartItem.maxStock;
+
+    return 0;
   };
 
   // ─── Get product details ───
@@ -127,25 +140,37 @@ export const SaleModal = ({
     return availableProducts.find(p => p.id === productId);
   };
 
-  // ─── Initialize with single product if provided ───
-  useEffect(() => {
-    if (initialProduct && !isMultiProduct) {
-      const stock = initialAvailableStock || getProductStock(initialProduct.id, defaultWarehouseId);
-      if (stock > 0) {
-        setCartItems([{
-          productId: initialProduct.id,
-          productName: initialProduct.name || initialProduct.product_name || "",
-          sku: initialProduct.sku || "",
-          warehouseId: defaultWarehouseId,
-          warehouseName: defaultWarehouseName,
-          quantity: 1,
-          price: initialProduct.price || initialProduct.product_Price || 0,
-          maxStock: stock,
-          product: initialProduct,
-        }]);
-      }
+// ─── Initialize with single product if provided ───
+// SaleModal.tsx - Updated useEffect
+
+// ─── Initialize with single product if provided ───
+useEffect(() => {
+  if (initialProduct && !isMultiProduct) {
+    // ─── FIX: Use initialAvailableStock directly, NO FALLBACK ───
+    const stock = initialAvailableStock ?? 0;
+    
+    console.log(`📦 [SaleModal] Initializing single product: ${initialProduct.name}`);
+    console.log(`📦 [SaleModal] Available stock from prop: ${stock}`);
+    
+    if (stock > 0) {
+      setCartItems([{
+        productId: initialProduct.id,
+        productName: initialProduct.name || initialProduct.product_name || "",
+        sku: initialProduct.sku || "",
+        warehouseId: defaultWarehouseId,
+        warehouseName: defaultWarehouseName,
+        quantity: 1,
+        price: initialProduct.price || initialProduct.product_Price || 0,
+        maxStock: stock,
+        product: initialProduct,
+      }]);
+      setError(null);
+    } else {
+      setCartItems([]);
+      setError(`This product is out of stock.`);
     }
-  }, [initialProduct, defaultWarehouseId, defaultWarehouseName, initialAvailableStock]);
+  }
+}, [initialProduct, defaultWarehouseId, defaultWarehouseName, initialAvailableStock, isMultiProduct]);
 
   // ─── Check if we should show multi-product mode ───
   useEffect(() => {
@@ -283,13 +308,12 @@ export const SaleModal = ({
           createdBy: "system",
         });
 
-        const oldStock = getProductStock(item.productId, item.warehouseId);
         SalesService.notifyInventoryChange({
           companyId,
           productId: item.productId,
           warehouseId: item.warehouseId,
-          newQuantity: oldStock - item.quantity,
-          oldQuantity: oldStock,
+          newQuantity: item.maxStock - item.quantity,
+          oldQuantity: item.maxStock,
         });
       }
 

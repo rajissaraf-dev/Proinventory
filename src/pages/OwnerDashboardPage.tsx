@@ -478,7 +478,13 @@ const handleMultiSell = () => {
  // ============================================================
 // SALE HANDLERS
 // ============================================================
+// OwnerDashboardPage.tsx - Fix handleSellProduct
+
+// OwnerDashboardPage.tsx - handleSellProduct
+
 const handleSellProduct = (product: Product) => {
+  console.log("🛒 [OwnerDashboard] Selling product:", product.name);
+  
   if (hasWarehouseScope && assignedWarehouseId) {
     const currentWarehouseId = previewWarehouseId;
     
@@ -493,61 +499,36 @@ const handleSellProduct = (product: Product) => {
   const warehouse = warehouses.find(w => w.id === warehouseId);
   const warehouseName = warehouse?.name || warehouseId;
   
-  const inventoryItems = warehouseInventory[warehouseId] || [];
-  const inventoryItem = inventoryItems.find((i: InventoryRecord) => i.productId === product.id);
-  const stockInWarehouse = inventoryItem?.quantity || 0;
+  // ─── FIX: Use displayedProducts which has warehouse-specific stock ───
+  const displayedProduct = displayedProducts.find(p => p.id === product.id);
+  
+  if (!displayedProduct) {
+    alert(`Product "${product.name}" not found in this warehouse.`);
+    return;
+  }
+  
+  const stockInWarehouse = displayedProduct.product_Qty ?? displayedProduct.stockQuantity ?? 0;
+  
+  console.log(`📊 [OwnerDashboard] Stock for "${product.name}" in ${warehouseName}: ${stockInWarehouse}`);
   
   if (stockInWarehouse <= 0) {
-    alert(`This product is out of stock in "${warehouseName}".`);
+    alert(`This product "${product.name}" is out of stock in "${warehouseName}".`);
     return;
   }
   
   setSelectedProductForSale({
-    product,
+    product: {
+      ...displayedProduct,
+      product_Qty: stockInWarehouse,
+      stockQuantity: stockInWarehouse,
+    },
     warehouseId,
     warehouseName,
     availableStock: stockInWarehouse,
   });
+  
+  console.log(`🛒 [OwnerDashboard] Setting selectedProductForSale with availableStock: ${stockInWarehouse}`);
 };
-
-  const loadNotificationsList = useCallback(async (cid = companyId, loadMore = false) => {
-  if (!cid) return;
-  
-  if (loadMore) {
-    setNotificationLoadingMore(true);
-  } else {
-    setNotificationsLoading(true);
-    setAllNotificationsLoaded(false);
-  }
-  
-  try {
-    const lastDoc = loadMore ? notificationLastVisible : null;
-    const result = await NotificationService.list(
-      cid,
-      notificationPageSize,
-      lastDoc,
-      'all'
-    );
-
-    if (loadMore) {
-      setNotifications(prev => [...prev, ...result.notifications]);
-    } else {
-      setNotifications(result.notifications);
-    }
-
-    setNotificationHasMore(result.hasMore);
-    setNotificationLastVisible(result.lastVisible);
-    setAllNotificationsLoaded(!result.hasMore);
-  } catch (error) {
-    console.error("Failed to load notifications:", error);
-  } finally {
-    if (loadMore) {
-      setNotificationLoadingMore(false);
-    } else {
-      setNotificationsLoading(false);
-    }
-  }
-}, [companyId, notificationPageSize, notificationLastVisible]);
 
  // ============================================================
   // LOADPENDINGORDER FUNCTION
@@ -674,6 +655,47 @@ const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
     }
   }, [companyId, movementPageSize, movementLastVisible, movementTypeFilter]);
 
+// OwnerDashboardPage.tsx - Correct order
+
+// 1. First define loadNotificationsList
+const loadNotificationsList = useCallback(async (cid = companyId, loadMore = false) => {
+  if (!cid) return;
+  
+  if (loadMore) {
+    setNotificationLoadingMore(true);
+  } else {
+    setNotificationsLoading(true);
+    setAllNotificationsLoaded(false);
+  }
+  
+  try {
+    const lastDoc = loadMore ? notificationLastVisible : null;
+    const result = await NotificationService.list(
+      cid,
+      notificationPageSize,
+      lastDoc,
+      'all'
+    );
+
+    if (loadMore) {
+      setNotifications(prev => [...prev, ...result.notifications]);
+    } else {
+      setNotifications(result.notifications);
+    }
+
+    setNotificationHasMore(result.hasMore);
+    setNotificationLastVisible(result.lastVisible);
+    setAllNotificationsLoaded(!result.hasMore);
+  } catch (error) {
+    console.error("Failed to load notifications:", error);
+  } finally {
+    if (loadMore) {
+      setNotificationLoadingMore(false);
+    } else {
+      setNotificationsLoading(false);
+    }
+  }
+}, [companyId, notificationPageSize, notificationLastVisible]);
 
 
   // ============================================================
@@ -782,7 +804,7 @@ const getTimeAgo = (date: Date): string => {
   loadNotifications();
   loadPendingOrders();
   
-}, [oTab, companyId]);
+}, [oTab, companyId,loadCategories,loadMovements, loadNotifications, loadNotificationsList, loadPendingOrders, loadStaff, loadTransfers,loadWarehouses]);
 
   useEffect(() => {
     if (!hasWarehouseScope || !assignedWarehouseId || transferForm.fromWarehouseId) return;

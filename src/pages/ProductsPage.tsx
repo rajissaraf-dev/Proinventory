@@ -227,24 +227,41 @@ const ProductsPage = () => {
     }
   };
 
-  const handleSell = (product: Product) => {
-    const stockQty = product.product_Qty ?? product.stockQuantity ?? 0;
-    if (stockQty <= 0) {
-      alert("This product is out of stock.");
-      return;
-    }
+  // ProductsPage.tsx - Fix handleSell
 
-    const warehouseId = previewWarehouseId || "main_warehouse";
-    const warehouseName = warehouses.find(w => w.id === warehouseId)?.name || warehouseId;
+// ProductsPage.tsx - handleSell
 
-    setSaleProduct({
-      product,
-      warehouseId,
-      warehouseName,
-      availableStock: stockQty,
-    });
+const handleSell = (product: Product) => {
+  // ─── FIX: Get stock from the product's product_Qty (which has warehouse stock) ───
+  const stockQty = product.product_Qty ?? product.stockQuantity ?? 0;
+  
+  console.log(`🛒 [ProductsPage] Selling: ${product.name}, Stock: ${stockQty}`);
+  console.log(`🛒 [ProductsPage] Product data:`, product);
+  
+  if (stockQty <= 0) {
+    alert(`This product "${product.name}" is out of stock.`);
+    return;
+  }
+
+  const warehouseId = previewWarehouseId || "main_warehouse";
+  const warehouseName = warehouses.find(w => w.id === warehouseId)?.name || warehouseId;
+
+  // ─── Ensure the product has the correct stock before passing ───
+  const productWithStock = {
+    ...product,
+    product_Qty: stockQty,
+    stockQuantity: stockQty,
   };
 
+  setSaleProduct({
+    product: productWithStock,
+    warehouseId,
+    warehouseName,
+    availableStock: stockQty,
+  });
+  
+  console.log(`🛒 [ProductsPage] Setting saleProduct with availableStock: ${stockQty}`);
+};
   const handleAddProduct = () => navigate("/owner?view=add-product");
   
   const handleEditComplete = async () => {

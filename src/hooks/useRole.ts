@@ -1,58 +1,93 @@
+// src/hooks/useRole.ts
 import useAppSelector from "./useAppSelector";
-import type { UserRole } from "../types";
+import type { UserRole, UserPermissions, ModulePermission } from "../types";
 
 /**
  * useRole — central role/permission helper hook.
  *
  * Usage:
- *   const { isSuperAdmin, isOwner, canWrite, canDelete } = useRole();
+ *   const { isOwner, isAdmin, canWrite, canDelete } = useRole();
  */
 const useRole = () => {
-  const user    = useAppSelector((s) => s.auth.user);
+  const user = useAppSelector((s) => s.auth.user);
   const profile = useAppSelector((s) => s.auth.profile);
 
+  // ─── Get role from profile or user ───
   const role: UserRole | null =
-    // Prefer the authoritative profile role, then fall back to the lightweight session user role.
     (profile?.role as UserRole | undefined) ??
     (user?.role as UserRole | undefined) ??
     null;
+  
   const perms = profile?.permissions;
   const assignedWarehouseId = profile?.assignedWarehouseId ?? user?.assignedWarehouseId ?? "";
 
-  /* ── Role booleans ── */
-  const isSuperAdmin   = role === "super_admin"   || !!user?.isSuperAdmin;
-  const isOwner        = role === "company_owner" || role === "guest";
-  const isAdmin        = role === "company_admin";
-  const isStaff        = role === "staff";
-  const isGuest        = role === "guest";
+  /* ─── Role booleans ─── */
+  const isOwner = role === "company_owner";
+  const isAdmin = role === "company_admin";
+  const isStaff = role === "staff";
   const isOwnerOrAdmin = isOwner || isAdmin;
-  const hasWarehouseScope = !isOwner && !isSuperAdmin && !!assignedWarehouseId;
+  const hasWarehouseScope = isStaff && !!assignedWarehouseId;
 
-  /* ── Permission helpers ── */
-  const canRead   = (mod: keyof NonNullable<typeof perms>) =>
-    isSuperAdmin || isOwner || !!(perms?.[mod] as any)?.read;
+  /* ─── Permission helpers ─── */
+  type PermissionModule = keyof UserPermissions;
 
-  const canWrite  = (mod: keyof NonNullable<typeof perms>) =>
-    isSuperAdmin || isOwner || !!(perms?.[mod] as any)?.write;
+  /**
+   * Check if a module has a specific permission
+   * Handles the different module shapes (some have only 'read', others have full ModulePermission)
+   */
+  const hasPermission = (mod: PermissionModule, action: "read" | "write" | "delete"): boolean => {
+    // Owners have all permissions
+    if (isOwner) return true;
+    
+    // Admins have all permissions except delete (handled separately)
+    if (isAdmin && action !== "delete") return true;
+    
+    // Staff need explicit permissions
+    if (isStaff && perms) {
+      const modulePerms = perms[mod];
+      if (!modulePerms) return false;
+      
+      // Handle the module permission safely
+      if (action === "read") {
+        return Boolean(modulePerms.read);
+      }
+      if (action === "write") {
+        // Check if write exists on the module (some modules like dashboard don't have write)
+        return Boolean((modulePerms as ModulePermission)?.write ?? false);
+      }
+      if (action === "delete") {
+        return Boolean((modulePerms as ModulePermission)?.delete ?? false);
+      }
+    }
+    
+    return false;
+  };
 
-  const canDelete = (mod: keyof NonNullable<typeof perms>) =>
-    isSuperAdmin || isOwner || !!(perms?.[mod] as any)?.delete;
+  const canRead = (mod: PermissionModule): boolean => {
+    return hasPermission(mod, "read");
+  };
 
-  /* ── Product-specific shortcuts used across the dashboard ── */
-  const canAddProduct    = canWrite("products");
-  const canEditProduct   = isSuperAdmin || isOwnerOrAdmin;
-  const canDeleteProduct = isSuperAdmin || isOwner;
-  const canManageUsers   = isSuperAdmin || isOwnerOrAdmin;
-  const canViewReports   = isSuperAdmin || isOwnerOrAdmin;
-  const canManageSettings = isSuperAdmin || isOwner;
+  const canWrite = (mod: PermissionModule): boolean => {
+    return hasPermission(mod, "write");
+  };
+
+  const canDelete = (mod: PermissionModule): boolean => {
+    return hasPermission(mod, "delete");
+  };
+
+  /* ─── Product-specific shortcuts ─── */
+  const canAddProduct = canWrite("products");
+  const canEditProduct = isOwner || isAdmin;
+  const canDeleteProduct = isOwner;
+  const canManageUsers = isOwner || isAdmin;
+  const canViewReports = isOwner || isAdmin;
+  const canManageSettings = isOwner;
 
   return {
     role,
-    isSuperAdmin,
     isOwner,
     isAdmin,
     isStaff,
-    isGuest,
     isOwnerOrAdmin,
     canRead,
     canWrite,

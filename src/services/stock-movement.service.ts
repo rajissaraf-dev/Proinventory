@@ -1,7 +1,19 @@
+// src/services/stock-movement.service.ts
+
 import {
-  collection, doc, setDoc, getDocs,
-  query, where, orderBy, limit,
-  getCountFromServer, startAfter, QueryDocumentSnapshot,
+  collection,
+  doc,
+  setDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
+  getCountFromServer,
+  startAfter,
+  QueryDocumentSnapshot,
+  CollectionReference,
+  Query,
 } from "firebase/firestore";
 import db from "./firebase";
 import { StockMovement, StockMovementType } from "../types";
@@ -15,39 +27,39 @@ export interface PaginatedMovements {
 }
 
 export interface LogMovementInput {
-  companyId:     string;
-  createdBy:     string;
-  productId:     string;
-  productName:   string;
-  sku:           string;
-  warehouseId:   string;
-  type:          StockMovementType;
-  quantity:      number;
+  companyId: string;
+  createdBy: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  warehouseId: string;
+  type: StockMovementType;
+  quantity: number;
   balanceBefore: number;
-  balanceAfter:  number;
-  reference?:    string;
-  notes?:        string;
+  balanceAfter: number;
+  reference?: string;
+  notes?: string;
 }
 
 export const StockMovementService = {
 
   /** Append a new movement record — ID is auto-generated */
   async log(input: LogMovementInput): Promise<StockMovement> {
-    const ref  = doc(collection(db, "companies", input.companyId, "stockMovements"));
+    const ref = doc(collection(db, "companies", input.companyId, "stockMovements"));
     const data: Omit<StockMovement, "id"> = {
-      productId:     input.productId,
-      productName:   input.productName,
-      sku:           input.sku,
-      warehouseId:   input.warehouseId,
-      type:          input.type,
-      quantity:      input.quantity,
+      productId: input.productId,
+      productName: input.productName,
+      sku: input.sku,
+      warehouseId: input.warehouseId,
+      type: input.type,
+      quantity: input.quantity,
       balanceBefore: input.balanceBefore,
-      balanceAfter:  input.balanceAfter,
-      reference:     input.reference ?? "",
-      notes:         input.notes     ?? "",
-      companyId:     input.companyId,
-      createdBy:     input.createdBy,
-      createdAt:     new Date(),
+      balanceAfter: input.balanceAfter,
+      reference: input.reference ?? "",
+      notes: input.notes ?? "",
+      companyId: input.companyId,
+      createdBy: input.createdBy,
+      createdAt: new Date(),
     };
     await setDoc(ref, data);
     return { id: ref.id, ...data };
@@ -85,10 +97,10 @@ export const StockMovementService = {
     lastVisible?: QueryDocumentSnapshot,
     typeFilter?: string
   ): Promise<PaginatedMovements> {
-    const ref = collection(db, "companies", companyId, "stockMovements");
+    const ref: CollectionReference = collection(db, "companies", companyId, "stockMovements");
     
     // Build base query
-    let q = query(
+    let q: Query = query(
       ref,
       orderBy("createdAt", "desc"),
       limit(pageSize)
@@ -104,8 +116,8 @@ export const StockMovementService = {
       q = query(q, startAfter(lastVisible));
     }
 
-    // Get total count
-    let countQuery = ref;
+    // ─── FIX: Properly type countQuery ───
+    let countQuery: CollectionReference | Query = ref;
     if (typeFilter && typeFilter !== "all") {
       countQuery = query(ref, where("type", "==", typeFilter));
     }
@@ -114,12 +126,12 @@ export const StockMovementService = {
 
     // Get paginated results
     const snap = await getDocs(q);
-    const movements = snap.docs.map((docSnap) => ({
+    const movements: StockMovement[] = snap.docs.map((docSnap) => ({
       id: docSnap.id,
       ...docSnap.data(),
     })) as StockMovement[];
 
-    const lastDoc = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    const lastDoc: QueryDocumentSnapshot | null = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
 
     return {
       movements,

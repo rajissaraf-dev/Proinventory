@@ -1,3 +1,4 @@
+// src/types/index.ts
 import { ReactNode } from "react";
 
 // ─── Firebase / Firestore ────────────────────────────────────────────────────
@@ -10,9 +11,9 @@ export interface FirebaseTimestamp {
 
 // ─── Role & Plan enums ───────────────────────────────────────────────────────
 
-// ── REMOVED: super_admin and guest ──
+// ── UPDATED: Only 3 roles (removed super_admin and guest) ──
 export type UserRole =
-  | "company_owner"     // business owner — full access to own company (super admin)
+  | "company_owner"     // business owner — full access to own company
   | "company_admin"     // delegated admin inside a company
   | "staff";            // can view + add products, cannot delete/update
 
@@ -44,7 +45,7 @@ export interface UserPermissions {
 }
 
 /** Default permissions per role */
-// ── REMOVED: super_admin and guest ──
+// ── UPDATED: Only 3 roles ──
 export const DEFAULT_PERMISSIONS: Record<UserRole, UserPermissions> = {
   company_owner: {
     dashboard:      { read: true },

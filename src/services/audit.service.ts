@@ -13,7 +13,8 @@ import {
   FirestoreError,
 } from "firebase/firestore";
 import db from "./firebase";
-// ✅ Removed unused import: getSecureToken
+
+// ─── Types ────────────────────────────────────────────────────────────────
 
 export type AuditAction = 
   | 'login' | 'logout' | 'register'
@@ -27,11 +28,10 @@ export type AuditAction =
   | 'failed_login' | 'failed_attempt'
   | 'suspicious_activity';
 
-// ✅ Define specific types for audit details instead of using any
 export type AuditDetails = Record<string, unknown>;
 
 export interface AuditLog {
-  id?: string; // ✅ Made optional for creation
+  id?: string;
   userId: string;
   userEmail: string;
   userRole: string;
@@ -39,32 +39,74 @@ export interface AuditLog {
   action: AuditAction;
   resourceType: string;
   resourceId?: string;
-  details: AuditDetails; // ✅ Changed from any to unknown
+  details: AuditDetails;
   ipAddress?: string;
   userAgent: string;
   timestamp: Date;
   status: 'success' | 'failure' | 'warning';
 }
 
-// ✅ Helper function to safely convert Firestore document to AuditLog
+// ─── Type for Firestore data ─────────────────────────────────────────────
+
+interface FirestoreAuditData extends DocumentData {
+  userId?: string;
+  userEmail?: string;
+  userRole?: string;
+  companyId?: string;
+  action?: string;
+  resourceType?: string;
+  resourceId?: string;
+  details?: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+  timestamp?: {
+    toDate: () => Date;
+  } | Date;
+  status?: string;
+}
+
+// ─── Helper: Safely convert Firestore document to AuditLog ─────────────
+
 function documentToAuditLog(doc: QueryDocumentSnapshot<DocumentData, DocumentData>): AuditLog {
-  const data = doc.data();
+  const data = doc.data() as FirestoreAuditData;
+  
+  // Safely convert timestamp
+  let timestamp: Date;
+  if (data.timestamp) {
+    if (typeof data.timestamp === 'object' && 'toDate' in data.timestamp) {
+      timestamp = data.timestamp.toDate();
+    } else if (data.timestamp instanceof Date) {
+      timestamp = data.timestamp;
+    } else {
+      timestamp = new Date();
+    }
+  } else {
+    timestamp = new Date();
+  }
+
+  // Validate status
+  const status = data.status === 'failure' || data.status === 'warning' 
+    ? data.status 
+    : 'success';
+
   return {
     id: doc.id,
     userId: data.userId ?? 'unknown',
     userEmail: data.userEmail ?? 'unknown',
     userRole: data.userRole ?? 'unknown',
     companyId: data.companyId,
-    action: data.action ?? 'view',
+    action: (data.action as AuditAction) ?? 'view',
     resourceType: data.resourceType ?? 'unknown',
     resourceId: data.resourceId,
     details: data.details ?? {},
     ipAddress: data.ipAddress,
     userAgent: data.userAgent ?? 'unknown',
-    timestamp: data.timestamp?.toDate?.() ?? new Date(),
-    status: data.status ?? 'success',
+    timestamp,
+    status,
   };
 }
+
+// ─── Service ──────────────────────────────────────────────────────────────
 
 export const AuditService = {
   async log(data: Omit<AuditLog, 'timestamp' | 'userAgent' | 'id'>): Promise<void> {
@@ -81,7 +123,6 @@ export const AuditService = {
         ? error.message 
         : 'Unknown error occurred';
       console.error('Failed to log audit:', errorMessage);
-      // Don't throw - audit logging should not break the app
     }
   },
 
@@ -100,7 +141,11 @@ export const AuditService = {
     }
   },
 
-  async getLogsByUser(companyId: string, userId: string, limitCount: number = 50): Promise<AuditLog[]> {
+  async getLogsByUser(
+    companyId: string, 
+    userId: string, 
+    limitCount: number = 50
+  ): Promise<AuditLog[]> {
     try {
       const q = query(
         collection(db, "companies", companyId, "auditLogs"),
@@ -116,7 +161,10 @@ export const AuditService = {
     }
   },
 
-  async getSuspiciousActivity(companyId: string, hours: number = 24): Promise<AuditLog[]> {
+  async getSuspiciousActivity(
+    companyId: string, 
+    hours: number = 24
+  ): Promise<AuditLog[]> {
     try {
       const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000);
       const q = query(
@@ -134,8 +182,11 @@ export const AuditService = {
     }
   },
 
-  // ✅ New helper method to get recent logs by action type
-  async getLogsByAction(companyId: string, action: AuditAction, limitCount: number = 50): Promise<AuditLog[]> {
+  async getLogsByAction(
+    companyId: string, 
+    action: AuditAction, 
+    limitCount: number = 50
+  ): Promise<AuditLog[]> {
     try {
       const q = query(
         collection(db, "companies", companyId, "auditLogs"),
@@ -151,7 +202,6 @@ export const AuditService = {
     }
   },
 
-  // ✅ New helper method to get logs within a date range
   async getLogsByDateRange(
     companyId: string, 
     startDate: Date, 
@@ -174,8 +224,10 @@ export const AuditService = {
     }
   },
 
-  // ✅ Helper to get audit statistics
-  async getAuditStats(companyId: string, hours: number = 24): Promise<{
+  async getAuditStats(
+    companyId: string, 
+    hours: number = 24
+  ): Promise<{
     total: number;
     byStatus: Record<AuditLog['status'], number>;
     byAction: Record<AuditAction, number>;
@@ -188,26 +240,30 @@ export const AuditService = {
         return Date.now() - logTime < hours * 60 * 60 * 1000;
       });
 
-      const stats = {
-        total: recentLogs.length,
-        byStatus: {
-          success: 0,
-          failure: 0,
-          warning: 0,
-        },
-        byAction: {} as Record<AuditAction, number>,
-        suspicious: 0,
+      // ─── Initialize stats with proper typing ───
+      const byStatus: Record<AuditLog['status'], number> = {
+        success: 0,
+        failure: 0,
+        warning: 0,
       };
+      
+      const byAction: Record<AuditAction, number> = {} as Record<AuditAction, number>;
 
       recentLogs.forEach(log => {
-        stats.byStatus[log.status] = (stats.byStatus[log.status] || 0) + 1;
-        stats.byAction[log.action] = (stats.byAction[log.action] || 0) + 1;
-        if (log.status === 'failure' || log.status === 'warning') {
-          stats.suspicious++;
-        }
+        byStatus[log.status] = (byStatus[log.status] || 0) + 1;
+        byAction[log.action] = (byAction[log.action] || 0) + 1;
       });
 
-      return stats;
+      const suspicious = recentLogs.filter(
+        log => log.status === 'failure' || log.status === 'warning'
+      ).length;
+
+      return {
+        total: recentLogs.length,
+        byStatus,
+        byAction,
+        suspicious,
+      };
     } catch (error) {
       console.error('Failed to get audit stats:', error);
       return {

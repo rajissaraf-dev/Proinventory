@@ -313,13 +313,13 @@ const [selectedProductForSale, setSelectedProductForSale] = useState<{
   availableStock: number;
 } | null>(null);
   // Notification state
-  const [notificationCount, setNotificationCount] = useState(0);
+const [notificationCount, setNotificationCount] = useState(0);
 
 // Add this with other state declarations
 const [pendingOrders, setPendingOrders] = useState(0);
 const [showOrderModal, setShowOrderModal] = useState(false);
 
-
+const [showMultiSaleModal, setShowMultiSaleModal] = useState(false);
   // Refs to prevent infinite loops
   const isLoadingRef = useRef(false);
 
@@ -468,7 +468,13 @@ const loadNotifications = useCallback(async (cid = companyId) => {
   }, [companyId]);
 
   
-
+const handleMultiSell = () => {
+  if (displayedProducts.length === 0) {
+    alert("No products available to sell in this warehouse.");
+    return;
+  }
+  setShowMultiSaleModal(true);
+};
  // ============================================================
 // SALE HANDLERS
 // ============================================================
@@ -987,7 +993,7 @@ const getTimeAgo = (date: Date): string => {
 ];
 
   return (
-    <div className="min-h-screen" style={{ background:"var(--color-bg-app)" }}>
+     <div className="min-h-screen overflow-x-hidden" style={{ background:"var(--color-bg-app)" }}>
     <DashboardSidebar
       collapsed={sideCol}
       onToggleCollapse={() => setSideCol(p => !p)}
@@ -1001,8 +1007,14 @@ const getTimeAgo = (date: Date): string => {
     />
   
 
-      <main className="transition-all duration-300 pt-14 min-h-screen relative"
-        style={{ marginLeft:`${sideW}px` }}>
+      <main className="transition-all duration-300 pt-14 min-h-screen overflow-x-hidden"
+          style={{ 
+          marginLeft: `${sideW}px`,
+          width: `calc(100% - ${sideW}px)`,
+          maxWidth: `calc(100% - ${sideW}px)`,
+          background: "var(--color-bg-app)",
+        }}
+        >
 
       
         <DashboardHeader 
@@ -1152,7 +1164,13 @@ const getTimeAgo = (date: Date): string => {
                 />
                   <RecentActivityPanel warehouseId={previewWarehouseId} />
                 </div>
-                <ProductsTable onEdit={id=>setEditId(id)} onAdd={()=>setDView("add-product")} onSell={handleSellProduct} productsOverride={displayedProducts}/>
+              <ProductsTable 
+                onEdit={id=>setEditId(id)} 
+                onAdd={()=>setDView("add-product")} 
+                onSell={handleSellProduct}
+                onMultiSell={handleMultiSell}  // ← ADD THIS
+                productsOverride={displayedProducts}
+              />
               </div>
         )}
 
@@ -2230,6 +2248,24 @@ const getTimeAgo = (date: Date): string => {
     availableStock={selectedProductForSale.availableStock}
     onClose={() => setSelectedProductForSale(null)}
     onSaleComplete={refreshAllData}
+  />
+)}
+
+{showMultiSaleModal && (
+  <SaleModal
+    companyId={companyId}
+    warehouseId={previewWarehouseId || "main_warehouse"}
+    warehouseName={currentWarehouseName || "Main Warehouse"}
+    products={displayedProducts}
+    warehouseInventory={warehouseInventory}
+    onClose={() => setShowMultiSaleModal(false)}
+    onSaleComplete={async () => {
+      await loadWarehouses();
+      if (previewWarehouseId) {
+        setSelectedWarehouseId(previewWarehouseId);
+      }
+      setShowMultiSaleModal(false);
+    }}
   />
 )}
 

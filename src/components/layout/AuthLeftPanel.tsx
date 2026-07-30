@@ -34,11 +34,8 @@ const FEATURES = [
   },
 ];
 
-interface AuthLeftPanelProps {
-  variant: "login" | "register";
-}
 
-const AuthLeftPanel = ({ variant }: AuthLeftPanelProps) => (
+const AuthLeftPanel = () => (
   <div
     className="hidden lg:flex flex-col h-full px-10 pt-8 pb-0 relative overflow-hidden"
     style={{ background: "var(--color-bg-sidebar)" }}
@@ -74,41 +71,7 @@ const AuthLeftPanel = ({ variant }: AuthLeftPanelProps) => (
         </span>
       </Link>
 
-      {/* Headline */}
-      {variant === "login" ? (
-        <>
-          <h2
-            className="text-4xl font-extrabold leading-tight mb-"
-            style={{ color: "var(--color-text-primary)" }}
-          >
-            Inventory management{" "}
-            <span className="gradient-text">made simple</span>,
-            <br />
-            powerful, and smart.
-          </h2>
-          <p className="text-sm leading-relaxed mb-6" style={{ color: "var(--color-text-muted)" }}>
-            Track stock, manage orders, and gain real-time insights across your entire business.
-          </p>
-        </>
-      ) : (
-        <>
-          <h2
-            className="text-4xl font-extrabold leading-tight mb-4"
-            style={{ color: "var(--color-text-primary)" }}
-          >
-            Create your account
-            <br />
-            and take control of
-            <br />
-            your{" "}
-            <span className="gradient-text">inventory</span>.
-          </h2>
-          <p className="text-sm leading-relaxed mb-6" style={{ color: "var(--color-text-muted)" }}>
-            Join thousands of businesses that trust ProInventory to manage stock, streamline
-            operations, and grow faster.
-          </p>
-        </>
-      )}
+      
 
       {/* Feature list */}
       <ul className="space-y-2">

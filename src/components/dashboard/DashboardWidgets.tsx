@@ -13,7 +13,7 @@ import {
   MdTrendingUp, MdTrendingDown, MdInfoOutline, MdCheckCircle, 
   MdSwapHoriz, MdInventory2, MdAttachMoney, MdLock,
   MdWarning, MdError, MdDoneAll, MdArrowForward,
-  MdSearch, MdFilterList, MdMoreVert
+  MdSearch, MdFilterList, MdMoreVert, MdShoppingCart
 } from "react-icons/md";
 import { FiEdit2, FiMoreHorizontal } from "react-icons/fi";
 import { useSelector } from "react-redux";
@@ -106,7 +106,6 @@ interface StatCardProps {
   iconBg: string;
   icon: React.ReactNode;
   restricted?: boolean;
-  trend?: 'up' | 'down' | 'neutral';
 }
 
 export const StatCard = ({ 
@@ -289,21 +288,21 @@ export const InventoryTurnoverChart = ({ productsOverride }: InventoryTurnoverCh
       x: {
         stacked: true,
         grid: { 
-          display: false, // ← Hide x-axis grid lines
+          display: false,
         },
         border: {
-          display: false, // ← Hide x-axis border
+          display: false,
         },
         ticks: { color: "#64748b", font: { size: 11 } },
       },
       y: {
         stacked: true,
         grid: { 
-          color: "rgba(255,255,255,0.05)", // ← Grid line color
-          lineWidth: 1,                    // ← Grid line width
+          color: "rgba(255,255,255,0.05)",
+          lineWidth: 1,
         },
         border: {
-          display: false, // ← Hide y-axis border
+          display: false,
         },
         ticks: {
           color: "#64748b",
@@ -365,6 +364,7 @@ export const InventoryTurnoverChart = ({ productsOverride }: InventoryTurnoverCh
     </div>
   );
 };
+
 /* ─────────────────────────────────────────────────────────────
    STOCK DISTRIBUTION DONUT CHART (enhanced)
 ───────────────────────────────────────────────────────────── */
@@ -856,18 +856,27 @@ export const RecentActivityPanel = ({ warehouseId }: RecentActivityPanelProps) =
   );
 };
 
+// src/components/dashboard/DashboardWidgets.tsx
 /* ─────────────────────────────────────────────────────────────
-   PRODUCTS OVERVIEW TABLE (enhanced)
+   PRODUCTS OVERVIEW TABLE (enhanced with Multi-Sell)
 ───────────────────────────────────────────────────────────── */
 interface ProductsTableProps {
   onEdit?: (id: string) => void;
   onAdd?:  () => void;
   onSell?: (product: Product) => void;
+  onMultiSell?: () => void; // ← ADDED
   readOnly?: boolean;
   productsOverride?: Product[];
 }
 
-export const ProductsTable = ({ onEdit, onAdd, onSell, readOnly = false, productsOverride }: ProductsTableProps) => {
+export const ProductsTable = ({ 
+  onEdit, 
+  onAdd, 
+  onSell,
+  onMultiSell, // ← ADDED
+  readOnly = false, 
+  productsOverride 
+}: ProductsTableProps) => {
   const reduxProducts = useSelector((s: RootState) => s.stock.productData);
   const products = productsOverride ?? reduxProducts;
 
@@ -949,6 +958,21 @@ export const ProductsTable = ({ onEdit, onAdd, onSell, readOnly = false, product
           </span>
         </h3>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* ─── Multi-Sell Button ─── */}
+          {onMultiSell && !readOnly && (
+            <button
+              onClick={onMultiSell}
+              className="h-9 px-3.5 rounded-lg text-xs flex items-center gap-1.5 transition-all hover:opacity-80"
+              style={{
+                background: "var(--color-brand-primary-soft)",
+                color: "var(--color-brand-primary)",
+                border: "1px solid var(--color-border-brand)",
+              }}
+            >
+              <MdShoppingCart size={14} /> Multi-Sell
+            </button>
+          )}
+          
           <div
             className="flex items-center gap-2 h-9 px-3.5 rounded-lg text-xs transition-all focus-within:ring-2 focus-within:ring-brand-primary/20"
             style={{

@@ -1,8 +1,8 @@
 // src/pages/ProductsPage.tsx
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { MdAdd } from "react-icons/md";
-import { Product, Category, InventoryRecord } from "../types";
+import { MdAdd, MdShoppingCart } from "react-icons/md";
+import { Product, Category, InventoryRecord, Warehouse } from "../types";
 import useAppSelector from "../hooks/useAppSelector";
 import useAppDispatch from "../hooks/useAppDispatch";
 import useRole from "../hooks/useRole";
@@ -42,8 +42,11 @@ const ProductsPage = () => {
     availableStock: number;
   } | null>(null);
 
-  // ─── EXACT SAME AS DASHBOARD ───
-  const [warehouses, setWarehouses] = useState<any[]>([]);
+  // ─── Multi-Sale Modal State ───
+  const [showMultiSaleModal, setShowMultiSaleModal] = useState(false);
+
+  // ─── FIX: Use proper Warehouse type instead of any[] ───
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseInventory, setWarehouseInventory] = useState<Record<string, InventoryRecord[]>>({});
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [whLoading, setWhLoading] = useState(true);
@@ -90,6 +93,15 @@ const ProductsPage = () => {
         } satisfies Product;
       });
   }, [previewWarehouseId, products, warehouseInventory]);
+
+  // ─── Handle multi-item sale ───
+  const handleMultiSell = () => {
+    if (displayedProducts.length === 0) {
+      alert("No products available to sell in this warehouse.");
+      return;
+    }
+    setShowMultiSaleModal(true);
+  };
 
   // ─── EXACT SAME AS DASHBOARD's loadWarehouses ───
   const loadWarehouses = useCallback(async () => {
@@ -247,6 +259,12 @@ const ProductsPage = () => {
     applyFilters();
   };
 
+  const handleMultiSaleComplete = async () => {
+    setShowMultiSaleModal(false);
+    await loadWarehouses();
+    applyFilters();
+  };
+
   const canEdit = isOwner || isAdmin;
   const sidebarWidth = isSidebarCollapsed ? 64 : 220;
   const handleToggleSidebar = () => dispatch(toggleSidebar());
@@ -307,13 +325,22 @@ const ProductsPage = () => {
               </p>
             </div>
             {canEdit && (
-              <button
-                onClick={handleAddProduct}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-80"
-                style={{ background: "var(--color-brand-primary)", color: "white" }}
-              >
-                <MdAdd size={18} /> Add Product
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleMultiSell}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-80"
+                  style={{ background: "var(--color-brand-primary-soft)", color: "var(--color-brand-primary)" }}
+                >
+                  <MdShoppingCart size={18} /> Multi-Sell
+                </button>
+                <button
+                  onClick={handleAddProduct}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-80"
+                  style={{ background: "var(--color-brand-primary)", color: "white" }}
+                >
+                  <MdAdd size={18} /> Add Product
+                </button>
+              </div>
             )}
           </div>
 
@@ -362,6 +389,7 @@ const ProductsPage = () => {
             onEdit={handleEdit}
             onDelete={handleDelete}
             onSell={handleSell}
+            onMultiSell={handleMultiSell}
             onAdd={handleAddProduct}
             warehouseName={previewWarehouseId || undefined}
           />
@@ -390,7 +418,7 @@ const ProductsPage = () => {
         />
       )}
 
-      {/* ── Sale Modal ── */}
+      {/* ── Single Product Sale Modal ── */}
       {saleProduct && (
         <SaleModal
           product={saleProduct.product}
@@ -400,6 +428,19 @@ const ProductsPage = () => {
           availableStock={saleProduct.availableStock}
           onClose={() => setSaleProduct(null)}
           onSaleComplete={handleSaleComplete}
+        />
+      )}
+
+      {/* ── Multi-Item Sale Modal ── */}
+      {showMultiSaleModal && (
+        <SaleModal
+          companyId={companyId}
+          warehouseId={previewWarehouseId || "main_warehouse"}
+          warehouseName={warehouseDisplayName || "Main Warehouse"}
+          products={displayedProducts}
+          warehouseInventory={warehouseInventory}
+          onClose={() => setShowMultiSaleModal(false)}
+          onSaleComplete={handleMultiSaleComplete}
         />
       )}
     </div>

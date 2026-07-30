@@ -1,4 +1,5 @@
 // src/components/products/ProductTable.tsx
+
 import { Product } from "../../types";
 import {
   MdEdit,
@@ -7,6 +8,7 @@ import {
   MdAdd,
   MdSearchOff,
   MdInventory,
+  MdShoppingCart,
 } from "react-icons/md";
 
 interface ProductTableProps {
@@ -17,6 +19,7 @@ interface ProductTableProps {
   onEdit: (product: Product) => void;
   onDelete: (productId: string) => void;
   onSell: (product: Product) => void;
+  onMultiSell?: () => void; // ← ADDED
   onAdd: () => void;
   warehouseName?: string;
 }
@@ -29,6 +32,7 @@ const ProductTable = ({
   onEdit,
   onDelete,
   onSell,
+  onMultiSell, // ← ADDED
   onAdd,
   warehouseName,
 }: ProductTableProps) => {
@@ -93,6 +97,47 @@ const ProductTable = ({
         border: "1px solid var(--color-border-soft)",
       }}
     >
+      {/* Table Header with Multi-Sell Button */}
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+        style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
+      >
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            Products
+          </h3>
+          <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+            ({products.length} items)
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* ─── Multi-Sell Button ─── */}
+          {onMultiSell && canEdit && (
+            <button
+              onClick={onMultiSell}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-80"
+              style={{
+                background: "var(--color-brand-primary-soft)",
+                color: "var(--color-brand-primary)",
+                border: "1px solid var(--color-border-brand)",
+              }}
+            >
+              <MdShoppingCart size={14} /> Multi-Sell
+            </button>
+          )}
+          {canEdit && (
+            <button
+              onClick={onAdd}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-80"
+              style={{ background: "var(--color-brand-primary)", color: "white" }}
+            >
+              <MdAdd size={14} /> Add Product
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Product Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
@@ -251,7 +296,6 @@ const ProductTable = ({
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1.5">
-                      {/* Sell button - available to all */}
                       {stockQty > 0 && (
                         <button
                           onClick={() => onSell(product)}
@@ -266,7 +310,6 @@ const ProductTable = ({
                         </button>
                       )}
 
-                      {/* Edit/Delete buttons - only for owner/admin */}
                       {canEdit && (
                         <>
                           <button

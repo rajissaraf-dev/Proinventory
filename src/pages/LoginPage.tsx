@@ -1,15 +1,13 @@
+// src/pages/LoginPage.tsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   signInWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithPopup,
 } from "firebase/auth";
 import { useForm, type Resolver } from "react-hook-form";
 import * as yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { MdEmail, MdLock, MdVisibility, MdVisibilityOff } from "react-icons/md";
-import { FcGoogle } from "react-icons/fc";
 import { auth } from "../services/firebase";
 import { setCurrentUser, clearCurrentUser, fetchUserProfile } from "../features/auth/authSlice";
 import AuthLeftPanel from "../components/layout/AuthLeftPanel";
@@ -28,9 +26,6 @@ const schema: yup.ObjectSchema<LoginForm> = yup.object({
 
 const loginResolver: Resolver<LoginForm> = yupResolver(schema) as Resolver<LoginForm>;
 
-/* ─── Constants ─────────────────────────────────────────── */
-const GUEST = { email: import.meta.env.VITE_GUEST_EMAIL as string, pass: import.meta.env.VITE_GUEST_PASSWORD as string };
-
 const INPUT_BASE =
   "w-full rounded-xl px-4 py-3 pl-11 text-sm outline-none transition-all";
 
@@ -39,42 +34,6 @@ const INPUT_STYLE = {
   border: "1px solid var(--color-input-border)",
   color: "var(--color-input-text)",
 };
-
-/* ─── Social Button ─────────────────────────────────────── */
-const SocialBtn = ({
-  icon,
-  label,
-  onClick,
-  disabled,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={disabled}
-    className="flex items-center justify-center gap-2.5 rounded-xl py-3 text-sm font-medium transition-all disabled:opacity-50 flex-1"
-    style={{
-      background: "var(--color-surface-3)",
-      border: "1px solid var(--color-border-medium)",
-      color: "var(--color-text-secondary)",
-    }}
-    onMouseEnter={(e) => {
-      (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border-brand)";
-      (e.currentTarget as HTMLElement).style.background  = "var(--color-surface-4)";
-    }}
-    onMouseLeave={(e) => {
-      (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border-medium)";
-      (e.currentTarget as HTMLElement).style.background  = "var(--color-surface-3)";
-    }}
-  >
-    {icon}
-    {label}
-  </button>
-);
 
 /* ─── Page ───────────────────────────────────────────────── */
 const LoginPage = () => {
@@ -108,11 +67,11 @@ const LoginPage = () => {
 
     console.log("✅ [Login] Signed in, fetching user profile for uid:", user.uid);
     const profile = await dispatch(fetchUserProfile(user.uid)).unwrap();
-    const target = profile.role === "super_admin"
-      ? "/superadmin"
-      : (profile.role === "company_owner" || profile.role === "company_admin" || profile.role === "guest")
-        ? "/owner"
-        : "/dashboard";
+    
+    // ─── Only owner and admin roles exist now ───
+    const target = (profile.role === "company_owner" || profile.role === "company_admin")
+      ? "/owner"
+      : "/dashboard";
 
     navigate(target);
   };
@@ -124,50 +83,6 @@ const LoginPage = () => {
       await login(data.email ?? "", data.password ?? "");
     } catch {
       setServerErr("Incorrect email or password. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* ── Guest login ── */
-  const handleGuest = async () => {
-    setLoading(true);
-    setServerErr("");
-    try {
-      // Sign in exactly like a normal user — the seed script has already
-      // written users/{uid} with role:"company_owner" and a real companyId,
-      // so fetchUserProfile will load full owner privileges automatically.
-      await login(
-        import.meta.env.VITE_GUEST_EMAIL as string,
-        import.meta.env.VITE_GUEST_PASSWORD as string,
-      );
-      console.log("✅ [Guest] Signed in — profile will load from users/{uid}");
-    } catch {
-      setServerErr("Guest login failed. Please check your connection and try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* ── Google sign-in ── */
-  const handleGoogle = async () => {
-    setLoading(true); setServerErr("");
-    try {
-      const { user } = await signInWithPopup(auth, new GoogleAuthProvider());
-      const payload  = { uid: user.uid, email: user.email ?? "" };
-      dispatch(setCurrentUser(payload));
-      sessionStorage.setItem("currentUser", JSON.stringify(payload));
-
-      const profile = await dispatch(fetchUserProfile(user.uid)).unwrap();
-      const target = profile.role === "super_admin"
-        ? "/superadmin"
-        : (profile.role === "company_owner" || profile.role === "company_admin" || profile.role === "guest")
-          ? "/owner"
-          : "/dashboard";
-
-      navigate(target);
-    } catch {
-      setServerErr("Google sign-in failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -187,7 +102,7 @@ const LoginPage = () => {
         }}
       >
         {/* ── Left panel ── */}
-        <AuthLeftPanel variant="login" />
+        <AuthLeftPanel />
 
         {/* ── Right panel ── */}
         <div
@@ -337,82 +252,6 @@ const LoginPage = () => {
               </button>
             </form>
 
-            {/* Divider */}
-            <div className="flex items-center gap-3 my-5">
-              <div className="flex-1 h-px" style={{ background: "var(--color-border-soft)" }} />
-              <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
-                or continue with
-              </span>
-              <div className="flex-1 h-px" style={{ background: "var(--color-border-soft)" }} />
-            </div>
-
-            {/* Social buttons */}
-            <div className="flex gap-3 mb-4">
-              <SocialBtn
-                icon={<FcGoogle size={18} />}
-                label="Google"
-                onClick={handleGoogle}
-                disabled={loading}
-              />
-              <SocialBtn
-                icon={
-                  <svg width="18" height="18" viewBox="0 0 21 21" fill="none">
-                    <path d="M0 0h10v10H0V0zm11 0h10v10H11V0zM0 11h10v10H0V11zm11 0h10v10H11V11z" fill="#F25022"/>
-                    <path d="M11 0h10v10H11V0z" fill="#7FBA00"/>
-                    <path d="M0 11h10v10H0V11z" fill="#00A4EF"/>
-                    <path d="M11 11h10v10H11V11z" fill="#FFB900"/>
-                  </svg>
-                }
-                label="Microsoft"
-                onClick={() => {}}
-                disabled={loading}
-              />
-              <SocialBtn
-                icon={
-                  <svg width="18" height="18" viewBox="0 0 814 1000" fill="currentColor">
-                    <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-42.4-155.5-127.4C46.9 681.8 1 529.4 1 385.8c0-196.6 127.5-300.4 251.9-300.4 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2z" />
-                  </svg>
-                }
-                label="Apple"
-                onClick={() => {}}
-                disabled={loading}
-              />
-            </div>
-
-            {/* Guest login */}
-            <button
-              type="button"
-              onClick={handleGuest}
-              disabled={loading}
-              className="w-full py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50 mb-5"
-              style={{
-                background: "transparent",
-                color: "var(--color-text-secondary)",
-                border: "1px solid var(--color-border-medium)",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border-brand)";
-                (e.currentTarget as HTMLElement).style.color = "var(--color-text-primary)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border-medium)";
-                (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)";
-              }}
-            >
-              {loading ? "Please wait…" : "👤 Continue as Guest"}
-            </button>
-
-            {/* Sign up link */}
-            <p className="text-center text-sm" style={{ color: "var(--color-text-muted)" }}>
-              Don't have an account?{" "}
-              <Link
-                to="/register"
-                className="font-semibold transition-colors"
-                style={{ color: "var(--color-brand-primary-soft)" }}
-              >
-                Create one
-              </Link>
-            </p>
           </div>
 
           {/* Footer */}

@@ -1,28 +1,53 @@
 // src/components/dashboard/SaleModal.tsx
 
-import { useState } from "react";
-import { MdClose, MdShoppingCart, MdAttachMoney, MdWarehouse } from "react-icons/md";
-import { Product } from "../../types";
+import { useState, useEffect } from "react";
+import { 
+  MdClose, MdShoppingCart, MdWarehouse, 
+  MdAdd, MdDelete, MdRemove, MdAddCircle, MdReceipt,
+  MdPerson, MdEmail, MdNote, MdPayment, MdPercent
+} from "react-icons/md";
+import { Product, InventoryRecord } from "../../types";
+
+interface CartItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  warehouseId: string;
+  warehouseName: string;
+  quantity: number;
+  price: number;
+  maxStock: number;
+  product: Product;
+}
+
+// ─── Define type for warehouse inventory ───
+interface WarehouseInventory {
+  [warehouseId: string]: InventoryRecord[];
+}
 
 interface SaleModalProps {
-  product: Product;
+  product?: Product;
   companyId: string;
   warehouseId: string;
   warehouseName: string;
-  availableStock: number;
+  availableStock?: number;
   onClose: () => void;
   onSaleComplete: () => void;
+  products?: Product[];
+  warehouseInventory?: WarehouseInventory; // ← FIXED: Proper type
 }
 
-interface SaleData {
-  quantity: number;
-  price: number;
-  customerName?: string;
-  customerEmail?: string;
-  notes?: string;
-  paymentMethod: 'cash' | 'card' | 'transfer' | 'bank_deposit';
-  discount?: number;
-  tax?: number;
+interface CustomerInfo {
+  name: string;
+  email: string;
+  phone: string;
+  notes: string;
+}
+
+interface PaymentInfo {
+  method: 'cash' | 'card' | 'transfer' | 'bank_deposit';
+  discount: number;
+  tax: number;
 }
 
 const S: React.CSSProperties = {
@@ -36,73 +61,239 @@ const S: React.CSSProperties = {
   width: "100%",
 };
 
+const S_SELECT: React.CSSProperties = {
+  ...S,
+  appearance: "none",
+  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 0.75rem center",
+  paddingRight: "2.5rem",
+};
+
 export const SaleModal = ({ 
-  product, 
+  product: initialProduct,
   companyId, 
-  warehouseId,
-  warehouseName,
-  availableStock,
+  warehouseId: defaultWarehouseId,
+  warehouseName: defaultWarehouseName,
+  availableStock: initialAvailableStock,
   onClose, 
-  onSaleComplete 
+  onSaleComplete,
+  products: allProducts = [],
+  warehouseInventory = {},
 }: SaleModalProps) => {
-  const [saleData, setSaleData] = useState<SaleData>({
-    quantity: 1,
-    price: product.product_Price || product.price || 0,
-    paymentMethod: 'cash',
+  // ─── State ───
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
+  // ─── REMOVED: unused selectedWarehouseId ───
+  const [quantity, setQuantity] = useState<number>(1);
+  const [customer, setCustomer] = useState<CustomerInfo>({
+    name: "",
+    email: "",
+    phone: "",
+    notes: "",
+  });
+  const [payment, setPayment] = useState<PaymentInfo>({
+    method: 'cash',
     discount: 0,
     tax: 0,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const maxQuantity = availableStock;
+  const [isMultiProduct, setIsMultiProduct] = useState(false);
 
-  const subtotal = saleData.quantity * saleData.price;
-  const discountAmount = (subtotal * (saleData.discount || 0)) / 100;
-  const taxAmount = ((subtotal - discountAmount) * (saleData.tax || 0)) / 100;
-  const total = subtotal - discountAmount + taxAmount;
+  // ─── Get available products for the warehouse ───
+  const getAvailableProducts = (): Product[] => {
+    if (allProducts.length > 0) {
+      return allProducts;
+    }
+    if (initialProduct) {
+      return [initialProduct];
+    }
+    return [];
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const availableProducts = getAvailableProducts();
 
-    if (saleData.quantity <= 0) {
+  // ─── Get stock for a product in a warehouse ───
+  const getProductStock = (productId: string, warehouseId: string): number => {
+    const inventory = warehouseInventory[warehouseId] || [];
+    // ─── FIXED: Properly typed find ───
+    const item = inventory.find((i: InventoryRecord) => i.productId === productId);
+    return item?.quantity || 0;
+  };
+
+  // ─── Get product details ───
+  const getProductDetails = (productId: string): Product | undefined => {
+    return availableProducts.find(p => p.id === productId);
+  };
+
+  // ─── Initialize with single product if provided ───
+  useEffect(() => {
+    if (initialProduct && !isMultiProduct) {
+      const stock = initialAvailableStock || getProductStock(initialProduct.id, defaultWarehouseId);
+      if (stock > 0) {
+        setCartItems([{
+          productId: initialProduct.id,
+          productName: initialProduct.name || initialProduct.product_name || "",
+          sku: initialProduct.sku || "",
+          warehouseId: defaultWarehouseId,
+          warehouseName: defaultWarehouseName,
+          quantity: 1,
+          price: initialProduct.price || initialProduct.product_Price || 0,
+          maxStock: stock,
+          product: initialProduct,
+        }]);
+      }
+    }
+  }, [initialProduct, defaultWarehouseId, defaultWarehouseName, initialAvailableStock]);
+
+  // ─── Check if we should show multi-product mode ───
+  useEffect(() => {
+    if (availableProducts.length > 1 || !initialProduct) {
+      setIsMultiProduct(true);
+    }
+  }, [availableProducts.length, initialProduct]);
+
+  // ─── Add item to cart ───
+  const addToCart = () => {
+    if (!selectedProductId) {
+      setError("Please select a product");
+      return;
+    }
+
+    const product = getProductDetails(selectedProductId);
+    if (!product) {
+      setError("Product not found");
+      return;
+    }
+
+    const stock = getProductStock(selectedProductId, defaultWarehouseId);
+    if (stock <= 0) {
+      setError("This product is out of stock in the selected warehouse");
+      return;
+    }
+
+    const existingItem = cartItems.find(
+      item => item.productId === selectedProductId && item.warehouseId === defaultWarehouseId
+    );
+
+    const qtyToAdd = Math.min(quantity, stock);
+    if (qtyToAdd <= 0) {
       setError("Quantity must be greater than 0");
       return;
     }
 
-    if (saleData.quantity > maxQuantity) {
-      setError(`Only ${maxQuantity} units available in stock at ${warehouseName}`);
+    if (existingItem) {
+      const newQty = Math.min(existingItem.quantity + qtyToAdd, existingItem.maxStock);
+      setCartItems(items => items.map(item =>
+        item.productId === selectedProductId && item.warehouseId === defaultWarehouseId
+          ? { ...item, quantity: newQty }
+          : item
+      ));
+    } else {
+      setCartItems(items => [...items, {
+        productId: product.id,
+        productName: product.name || product.product_name || "",
+        sku: product.sku || "",
+        warehouseId: defaultWarehouseId,
+        warehouseName: defaultWarehouseName,
+        quantity: qtyToAdd,
+        price: product.price || product.product_Price || 0,
+        maxStock: stock,
+        product,
+      }]);
+    }
+
+    setSelectedProductId("");
+    setQuantity(1);
+    setError(null);
+  };
+
+  // ─── Remove item from cart ───
+  const removeFromCart = (index: number) => {
+    setCartItems(items => items.filter((_, i) => i !== index));
+  };
+
+  // ─── Update item quantity ───
+  const updateQuantity = (index: number, newQuantity: number) => {
+    const item = cartItems[index];
+    if (!item) return;
+    const clamped = Math.max(1, Math.min(newQuantity, item.maxStock));
+    setCartItems(items => items.map((it, i) =>
+      i === index ? { ...it, quantity: clamped } : it
+    ));
+  };
+
+  // ─── Calculate totals ───
+  const calculateTotals = () => {
+    const subtotal = cartItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    const discountAmount = (subtotal * (payment.discount || 0)) / 100;
+    const taxableAmount = subtotal - discountAmount;
+    const taxAmount = (taxableAmount * (payment.tax || 0)) / 100;
+    const total = taxableAmount + taxAmount;
+    return { subtotal, discountAmount, taxAmount, total };
+  };
+
+  const { subtotal, discountAmount, taxAmount, total } = calculateTotals();
+
+  // ─── Submit sale ───
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (cartItems.length === 0) {
+      setError("Please add at least one product to the cart");
       return;
     }
 
-    if (saleData.price <= 0) {
-      setError("Price must be greater than 0");
-      return;
+    for (const item of cartItems) {
+      const currentStock = getProductStock(item.productId, item.warehouseId);
+      if (currentStock < item.quantity) {
+        setError(`Not enough stock for "${item.productName}". Available: ${currentStock}, Requested: ${item.quantity}`);
+        return;
+      }
     }
 
     setLoading(true);
     try {
       const { SalesService } = await import("../../services/sales.service");
-      
-      await SalesService.recordSale({
-        companyId,
-        productId: product.id,
-        productName: product.name || product.product_name || "",
-        sku: product.sku || "",
-        warehouseId,
-        warehouseName,
-        quantity: saleData.quantity,
-        price: saleData.price,
-        totalAmount: total,
-        customerName: saleData.customerName,
-        customerEmail: saleData.customerEmail,
-        notes: saleData.notes,
-        paymentMethod: saleData.paymentMethod,
-        discount: saleData.discount || 0,
-        tax: saleData.tax || 0,
-        createdBy: "system",
-      });
+
+      for (const item of cartItems) {
+        const itemTotal = item.quantity * item.price;
+        const itemDiscount = (itemTotal * (payment.discount || 0)) / 100;
+        const itemTax = ((itemTotal - itemDiscount) * (payment.tax || 0)) / 100;
+        const itemFinalTotal = itemTotal - itemDiscount + itemTax;
+
+        await SalesService.recordSale({
+          companyId,
+          productId: item.productId,
+          productName: item.productName,
+          sku: item.sku,
+          warehouseId: item.warehouseId,
+          warehouseName: item.warehouseName,
+          quantity: item.quantity,
+          price: item.price,
+          totalAmount: itemFinalTotal,
+          customerName: customer.name || undefined,
+          customerEmail: customer.email || undefined,
+          notes: customer.notes || `Multi-item sale with ${cartItems.length} items`,
+          paymentMethod: payment.method,
+          discount: payment.discount || 0,
+          tax: payment.tax || 0,
+          createdBy: "system",
+        });
+
+        const oldStock = getProductStock(item.productId, item.warehouseId);
+        SalesService.notifyInventoryChange({
+          companyId,
+          productId: item.productId,
+          warehouseId: item.warehouseId,
+          newQuantity: oldStock - item.quantity,
+          oldQuantity: oldStock,
+        });
+      }
+
+      console.log(`✅ Multi-item sale completed: ${cartItems.length} items sold`);
 
       onSaleComplete();
       onClose();
@@ -113,37 +304,74 @@ export const SaleModal = ({
     }
   };
 
-  // ✅ Handle quantity change - allow empty input
-  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    
-    // Allow empty input (user is typing)
-    if (raw === "") {
-      setSaleData(prev => ({ ...prev, quantity: 0 })); // Set to 0 temporarily
-      return;
-    }
-    
-    const parsed = Number(raw);
-    if (isNaN(parsed)) return;
-    
-    // Clamp between 1 and maxQuantity
-    const clamped = Math.min(Math.max(1, parsed), maxQuantity || 1);
-    setSaleData(prev => ({ ...prev, quantity: clamped }));
-  };
-
-  // ✅ Handle blur - ensure valid value
-  const handleQuantityBlur = () => {
-    if (saleData.quantity < 1) {
-      setSaleData(prev => ({ ...prev, quantity: 1 }));
-    }
+  // ─── Render cart item ───
+  const renderCartItem = (item: CartItem, index: number) => {
+    const itemTotal = item.quantity * item.price;
+    return (
+      <div
+        key={`${item.productId}-${item.warehouseId}-${index}`}
+        className="flex items-center gap-3 p-2 rounded-lg"
+        style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border-soft)" }}
+      >
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>
+            {item.productName}
+          </p>
+          <div className="flex items-center gap-2 text-[10px]">
+            <span style={{ color: "var(--color-text-faint)" }}>SKU: {item.sku}</span>
+            <span style={{ color: "var(--color-text-faint)" }}>|</span>
+            <span style={{ color: "var(--color-text-faint)" }}>Stock: {item.maxStock}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => updateQuantity(index, item.quantity - 1)}
+            className="w-6 h-6 rounded flex items-center justify-center transition-colors hover:bg-white/10"
+            style={{ color: "var(--color-text-muted)" }}
+            disabled={item.quantity <= 1}
+          >
+            <MdRemove size={14} />
+          </button>
+          <span className="text-sm font-semibold w-8 text-center" style={{ color: "var(--color-text-primary)" }}>
+            {item.quantity}
+          </span>
+          <button
+            type="button"
+            onClick={() => updateQuantity(index, item.quantity + 1)}
+            className="w-6 h-6 rounded flex items-center justify-center transition-colors hover:bg-white/10"
+            style={{ color: "var(--color-text-muted)" }}
+            disabled={item.quantity >= item.maxStock}
+          >
+            <MdAdd size={14} />
+          </button>
+        </div>
+        <div className="text-right min-w-[70px]">
+          <p className="text-xs font-semibold" style={{ color: "var(--color-brand-primary-soft)" }}>
+            ${itemTotal.toFixed(2)}
+          </p>
+          <p className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+            @ ${item.price.toFixed(2)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => removeFromCart(index)}
+          className="w-6 h-6 rounded flex items-center justify-center transition-colors hover:bg-red-500/20"
+          style={{ color: "var(--color-danger)" }}
+        >
+          <MdDelete size={14} />
+        </button>
+      </div>
+    );
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
+      <div className="w-full max-w-2xl rounded-2xl p-6 max-h-[95vh] overflow-y-auto"
         style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border-brand)", boxShadow: "var(--shadow-card)" }}>
         
-        {/* Header */}
+        {/* ─── Header ─── */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -152,17 +380,11 @@ export const SaleModal = ({
             </div>
             <div>
               <h2 className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
-                Record Sale
+                {isMultiProduct ? "Multi-Item Sale" : "Record Sale"}
               </h2>
               <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                {product.name || product.product_name}
+                {isMultiProduct ? "Add products to cart and complete sale" : "Complete sale for selected product"}
               </p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <MdWarehouse size={12} style={{ color: "var(--color-text-faint)" }} />
-                <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
-                  {warehouseName}
-                </span>
-              </div>
             </div>
           </div>
           <button 
@@ -181,162 +403,199 @@ export const SaleModal = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Warehouse Info - Read Only */}
-          <div className="rounded-lg p-2 text-xs flex items-center gap-2"
+          {/* ─── Warehouse Info ─── */}
+          <div className="rounded-lg p-3 text-xs flex items-center gap-2"
             style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}>
             <MdWarehouse size={14} style={{ color: "var(--color-brand-primary-soft)" }} />
             <span style={{ color: "var(--color-text-secondary)" }}>
-              Selling from: <strong style={{ color: "var(--color-text-primary)" }}>{warehouseName}</strong>
-            </span>
-            <span className="ml-auto text-[10px]" style={{ color: "var(--color-text-faint)" }}>
-              Stock: {maxQuantity} units
+              Selling from: <strong style={{ color: "var(--color-text-primary)" }}>{defaultWarehouseName}</strong>
             </span>
           </div>
 
-          {/* Quantity & Price */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                Quantity *
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={maxQuantity}
-                value={saleData.quantity === 0 ? "" : saleData.quantity} // ✅ Show empty when 0
-                onChange={handleQuantityChange} // ✅ Use new handler
-                onBlur={handleQuantityBlur} // ✅ Fix on blur
-                required
-                style={S}
-              />
-              <p className="text-[10px] mt-0.5" style={{ color: "var(--color-text-faint)" }}>
-                Available at {warehouseName}: {maxQuantity} units
+          {/* ─── Add Products Section (Multi-product) ─── */}
+          {isMultiProduct && (
+            <div className="rounded-lg p-3 space-y-3"
+              style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}>
+              <p className="text-xs font-semibold" style={{ color: "var(--color-text-muted)" }}>
+                Add Products to Cart
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex-1 min-w-[150px]">
+                  <select
+                    value={selectedProductId}
+                    onChange={(e) => setSelectedProductId(e.target.value)}
+                    style={S_SELECT}
+                    className="w-full"
+                  >
+                    <option value="">Select Product</option>
+                    {availableProducts.map((p) => {
+                      const stock = getProductStock(p.id, defaultWarehouseId);
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {p.name || p.product_name} ({stock} in stock)
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div className="w-24">
+                  <input
+                    type="number"
+                    min={1}
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                    style={S}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={addToCart}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold transition-colors hover:opacity-80 flex items-center gap-1"
+                  style={{ background: "var(--color-brand-primary)", color: "white" }}
+                >
+                  <MdAddCircle size={14} /> Add
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ─── Cart Items ─── */}
+          {cartItems.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold" style={{ color: "var(--color-text-muted)" }}>
+                  Cart ({cartItems.length} items)
+                </p>
+                <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+                  Total: ${subtotal.toFixed(2)}
+                </span>
+              </div>
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {cartItems.map((item, index) => renderCartItem(item, index))}
+              </div>
+            </div>
+          )}
+
+          {/* ─── Empty Cart State ─── */}
+          {cartItems.length === 0 && !initialProduct && (
+            <div className="rounded-lg p-6 text-center"
+              style={{ background: "var(--color-surface-1)", border: "1px dashed var(--color-border-soft)" }}>
+              <MdShoppingCart size={32} style={{ color: "var(--color-text-faint)" }} className="mx-auto mb-2" />
+              <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
+                No products in cart
+              </p>
+              <p className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+                Select products above to add them to the sale
               </p>
             </div>
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                Price per Unit *
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min={0.01}
-                value={saleData.price}
-                onChange={(e) => setSaleData(prev => ({ ...prev, price: Number(e.target.value) }))}
-                required
-                style={S}
-              />
-            </div>
-          </div>
+          )}
 
-          {/* Customer Info */}
+          {/* ─── Customer Info ─── */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                Customer Name
+              <label className="block text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--color-text-secondary)" }}>
+                <MdPerson size={12} /> Customer Name
               </label>
               <input
                 type="text"
-                value={saleData.customerName || ""}
-                onChange={(e) => setSaleData(prev => ({ ...prev, customerName: e.target.value }))}
+                value={customer.name}
+                onChange={(e) => setCustomer(prev => ({ ...prev, name: e.target.value }))}
                 placeholder="Walk-in Customer"
                 style={S}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                Customer Email
+              <label className="block text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--color-text-secondary)" }}>
+                <MdEmail size={12} /> Email
               </label>
               <input
                 type="email"
-                value={saleData.customerEmail || ""}
-                onChange={(e) => setSaleData(prev => ({ ...prev, customerEmail: e.target.value }))}
+                value={customer.email}
+                onChange={(e) => setCustomer(prev => ({ ...prev, email: e.target.value }))}
                 placeholder="customer@email.com"
                 style={S}
               />
             </div>
           </div>
 
-          {/* Discount & Tax */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* ─── Payment Details ─── */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                Discount (%)
+              <label className="block text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--color-text-secondary)" }}>
+                <MdPayment size={12} /> Payment Method *
+              </label>
+              <select
+                value={payment.method}
+                onChange={(e) => setPayment(prev => ({ ...prev, method: e.target.value as PaymentInfo['method'] }))}
+                style={S_SELECT}
+                required
+              >
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="transfer">Bank Transfer</option>
+                <option value="bank_deposit">Bank Deposit</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--color-text-secondary)" }}>
+                <MdPercent size={12} /> Discount (%)
               </label>
               <input
                 type="number"
                 step="0.01"
                 min={0}
                 max={100}
-                value={saleData.discount}
-                onChange={(e) => setSaleData(prev => ({ ...prev, discount: Number(e.target.value) }))}
+                value={payment.discount}
+                onChange={(e) => setPayment(prev => ({ ...prev, discount: Number(e.target.value) }))}
                 style={S}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                Tax (%)
+              <label className="block text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--color-text-secondary)" }}>
+                <MdPercent size={12} /> Tax (%)
               </label>
               <input
                 type="number"
                 step="0.01"
                 min={0}
                 max={100}
-                value={saleData.tax}
-                onChange={(e) => setSaleData(prev => ({ ...prev, tax: Number(e.target.value) }))}
+                value={payment.tax}
+                onChange={(e) => setPayment(prev => ({ ...prev, tax: Number(e.target.value) }))}
                 style={S}
               />
             </div>
           </div>
 
-          {/* Payment Method */}
+          {/* ─── Notes ─── */}
           <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-              Payment Method *
-            </label>
-            <select
-              value={saleData.paymentMethod}
-              onChange={(e) => setSaleData(prev => ({ ...prev, paymentMethod: e.target.value as SaleData['paymentMethod'] }))}
-              style={S}
-              required
-            >
-              <option value="cash">Cash</option>
-              <option value="card">Card</option>
-              <option value="transfer">Bank Transfer</option>
-              <option value="bank_deposit">Bank Deposit</option>
-            </select>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-              Notes
+            <label className="block text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--color-text-secondary)" }}>
+              <MdNote size={12} /> Notes
             </label>
             <textarea
-              value={saleData.notes || ""}
-              onChange={(e) => setSaleData(prev => ({ ...prev, notes: e.target.value }))}
+              value={customer.notes}
+              onChange={(e) => setCustomer(prev => ({ ...prev, notes: e.target.value }))}
               placeholder="Any additional notes about this sale..."
               rows={2}
               style={{ ...S, resize: "vertical" }}
             />
           </div>
 
-          {/* Totals Summary */}
+          {/* ─── Totals Summary ─── */}
           <div className="rounded-lg p-3 space-y-1"
             style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}>
             <div className="flex justify-between text-xs">
               <span style={{ color: "var(--color-text-muted)" }}>Subtotal</span>
               <span style={{ color: "var(--color-text-primary)" }}>${subtotal.toFixed(2)}</span>
             </div>
-            {saleData.discount && saleData.discount > 0 && (
+            {payment.discount > 0 && (
               <div className="flex justify-between text-xs">
-                <span style={{ color: "var(--color-text-muted)" }}>Discount ({saleData.discount}%)</span>
+                <span style={{ color: "var(--color-text-muted)" }}>Discount ({payment.discount}%)</span>
                 <span style={{ color: "var(--color-danger)" }}>-${discountAmount.toFixed(2)}</span>
               </div>
             )}
-            {saleData.tax && saleData.tax > 0 && (
+            {payment.tax > 0 && (
               <div className="flex justify-between text-xs">
-                <span style={{ color: "var(--color-text-muted)" }}>Tax ({saleData.tax}%)</span>
+                <span style={{ color: "var(--color-text-muted)" }}>Tax ({payment.tax}%)</span>
                 <span style={{ color: "var(--color-text-primary)" }}>+${taxAmount.toFixed(2)}</span>
               </div>
             )}
@@ -345,9 +604,13 @@ export const SaleModal = ({
               <span style={{ color: "var(--color-text-primary)" }}>Total</span>
               <span style={{ color: "var(--color-brand-primary-soft)" }}>${total.toFixed(2)}</span>
             </div>
+            <div className="flex justify-between text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+              <span>{cartItems.length} item{cartItems.length !== 1 ? "s" : ""} in cart</span>
+              <span>{cartItems.reduce((sum, i) => sum + i.quantity, 0)} total units</span>
+            </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* ─── Action Buttons ─── */}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -363,15 +626,15 @@ export const SaleModal = ({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || cartItems.length === 0}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors hover:opacity-80 disabled:opacity-50 flex items-center justify-center gap-2"
               style={{
                 background: "var(--color-brand-primary)",
                 color: "white",
               }}
             >
-              <MdAttachMoney size={16} />
-              {loading ? "Recording..." : "Complete Sale"}
+              <MdReceipt size={16} />
+              {loading ? "Processing..." : `Complete Sale (${cartItems.length})`}
             </button>
           </div>
         </form>

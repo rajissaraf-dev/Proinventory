@@ -100,24 +100,29 @@ const DashboardSidebar = ({
     { label: "Integrations", icon: <MdExtension size={18} />, to: "/dashboard" },
   ];
 
-  // Use displayCount for the badge
-  const bottomNav: NavItem[] = [
-    { 
-      label: "Notifications", 
-      icon: <MdNotifications size={18} />, 
-      onClick: () => {
-        if (onAlertsClick) {
-          onAlertsClick();
-        } else {
-          navigate("/dashboard?tab=notifications");
-        }
-      }, 
-      badge: displayCount
-    },
-    { label: "Messages", icon: <MdMessage size={18} />, to: "/dashboard", badge: messageCount },
-    { label: "Settings", icon: <MdSettings size={18} />, to: "/dashboard" },
-    { label: "Log Out", icon: <MdLogout size={18} />, onClick: handleLogout },
-  ];
+// ─── Update bottomNav to show message badge ───
+const bottomNav: NavItem[] = [
+  { 
+    label: "Notifications", 
+    icon: <MdNotifications size={18} />, 
+    onClick: () => {
+      if (onAlertsClick) {
+        onAlertsClick();
+      } else {
+        navigate("/dashboard?tab=notifications");
+      }
+    }, 
+    badge: displayCount
+  },
+  { 
+    label: "Messages", 
+    icon: <MdMessage size={18} />, 
+    onClick: () => navigate("/messages"), 
+    badge: messageCount 
+  },
+  { label: "Settings", icon: <MdSettings size={18} />, to: "/dashboard" },
+  { label: "Log Out", icon: <MdLogout size={18} />, onClick: handleLogout },
+];
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const isProducts = item.label === "Products";

@@ -68,10 +68,53 @@ interface InventoryData {
   warehouseId?: string;
 }
 
+// ─── NEW: Event listener for real-time updates ───
+type InventoryChangeListener = (data: {
+  companyId: string;
+  productId: string;
+  warehouseId: string;
+  newQuantity: number;
+  oldQuantity: number;
+}) => void;
+
+const listeners: InventoryChangeListener[] = [];
+
 export const SalesService = {
   /**
+   * ─── NEW: Subscribe to inventory changes ───
+   */
+  subscribeToInventoryChanges(listener: InventoryChangeListener): () => void {
+    listeners.push(listener);
+    return () => {
+      const index = listeners.indexOf(listener);
+      if (index > -1) {
+        listeners.splice(index, 1);
+      }
+    };
+  },
+
+  /**
+   * ─── NEW: Notify all listeners of inventory change ───
+   */
+  notifyInventoryChange(data: {
+    companyId: string;
+    productId: string;
+    warehouseId: string;
+    newQuantity: number;
+    oldQuantity: number;
+  }): void {
+    listeners.forEach((listener) => {
+      try {
+        listener(data);
+      } catch (error) {
+        console.error("Error in inventory change listener:", error);
+      }
+    });
+  },
+
+  /**
    * Record a sale - updates inventory and creates sale record
-   * Now supports warehouse-specific sales
+   * Now supports warehouse-specific sales with real-time sync
    */
   async recordSale(input: RecordSaleInput): Promise<string> {
     const { companyId, productId, quantity, createdBy, warehouseId, warehouseName } = input;
@@ -84,6 +127,8 @@ export const SalesService = {
     const inventoryRef = doc(db, "companies", companyId, "inventory", inventoryId);
 
     let saleId = "";
+    let oldQuantity = 0;
+    let newQuantity = 0;
 
     await runTransaction(db, async (transaction) => {
       // Read current data
@@ -102,27 +147,29 @@ export const SalesService = {
 
       // Check stock availability in this warehouse
       const currentStock = inventoryData.quantity || 0;
+      oldQuantity = currentStock;
+      
       if (currentStock < quantity) {
         throw new Error(`Insufficient stock in "${warehouseName}". Available: ${currentStock}, Requested: ${quantity}`);
       }
 
-      const newStock = currentStock - quantity;
+      newQuantity = currentStock - quantity;
       const newReserved = inventoryData.reservedQty || 0;
 
       // 1. Update inventory for this specific warehouse
       transaction.update(inventoryRef, {
-        quantity: newStock,
-        availableQty: newStock - newReserved,
+        quantity: newQuantity,
+        availableQty: newQuantity - newReserved,
         updatedAt: serverTimestamp(),
       });
 
       // 2. Get total stock across all warehouses
       const allInventoryRef = collection(db, "companies", companyId, "inventory");
       const q = query(allInventoryRef, where("productId", "==", productId));
-      const allInventorySnap = await getDocs(q); // ✅ Fixed: renamed to avoid redeclaration
+      const allInventorySnap = await getDocs(q);
       
       let totalQty = 0;
-      allInventorySnap.forEach((doc) => { // ✅ Fixed: forEach exists on QuerySnapshot
+      allInventorySnap.forEach((doc) => {
         const data = doc.data() as InventoryData;
         totalQty += data.quantity || 0;
       });
@@ -174,13 +221,24 @@ export const SalesService = {
         type: "sale",
         quantity: -quantity,
         balanceBefore: currentStock,
-        balanceAfter: newStock,
+        balanceAfter: newQuantity,
         reference: `SALE-${saleRef.id.slice(0, 8).toUpperCase()}`,
         notes: `Sale of ${quantity} units from ${warehouseName} to ${input.customerName || "Walk-in Customer"}`,
         createdBy,
         createdAt: serverTimestamp(),
       });
     });
+
+    // ─── NEW: Notify listeners of inventory change ───
+    this.notifyInventoryChange({
+      companyId,
+      productId,
+      warehouseId,
+      newQuantity,
+      oldQuantity,
+    });
+
+    console.log(`✅ Sale recorded for ${input.productName}: ${oldQuantity} → ${newQuantity} units in ${warehouseName}`);
 
     return saleId;
   },

@@ -297,6 +297,14 @@ const OwnerDashboardPage = () => {
   const [transferLoadingMore, setTransferLoadingMore] = useState(false);
   const [allTransfersLoaded, setAllTransfersLoaded] = useState(false);
 
+  useEffect(() => {
+    movementLastVisibleRef.current = movementLastVisible;
+  }, [movementLastVisible]);
+
+  useEffect(() => {
+    transferLastVisibleRef.current = transferLastVisible;
+  }, [transferLastVisible]);
+
 
   // Notifications state
 const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -322,6 +330,16 @@ const [showOrderModal, setShowOrderModal] = useState(false);
 const [showMultiSaleModal, setShowMultiSaleModal] = useState(false);
   // Refs to prevent infinite loops
   const isLoadingRef = useRef(false);
+
+  // ─── FIX: track pagination cursors via ref, NOT via useCallback deps ───
+  // Firestore returns a new QueryDocumentSnapshot object on every fetch, so
+  // including movementLastVisible/transferLastVisible directly in a
+  // useCallback's dependency array causes that callback to get a new
+  // identity after every load — which then retriggers any effect that
+  // depends on the callback, creating an infinite fetch loop (the
+  // "blinking" tab behavior).
+  const movementLastVisibleRef = useRef<QueryDocumentSnapshot | null>(null);
+  const transferLastVisibleRef = useRef<QueryDocumentSnapshot | null>(null);
 
   useEffect(() => {
     const tabParam = new URLSearchParams(location.search).get("tab");
@@ -562,7 +580,7 @@ const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
   }
   
   try {
-    const lastDoc = loadMore ? transferLastVisible : null;
+    const lastDoc = loadMore ? transferLastVisibleRef.current : null;
     const result = await TransferService.listPaginated(
       cid,
       transferPageSize,
@@ -605,7 +623,7 @@ const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
     }
     isLoadingRef.current = false;
   }
-}, [companyId, transferPageSize, transferLastVisible, transferStatusFilter, hasWarehouseScope, assignedWarehouseId]);
+}, [companyId, transferPageSize, transferStatusFilter, hasWarehouseScope, assignedWarehouseId]);
 
  // ============================================================
   // LOADMOVEMENTS FUNCTION
@@ -625,7 +643,7 @@ const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
     }
     
     try {
-      const lastDoc = loadMore ? movementLastVisible : null;
+      const lastDoc = loadMore ? movementLastVisibleRef.current : null;
       const result = await StockMovementService.listPaginated(
         cid,
         movementPageSize,
@@ -653,12 +671,15 @@ const loadTransfers = useCallback(async (cid = companyId, loadMore = false) => {
       }
       isLoadingRef.current = false;
     }
-  }, [companyId, movementPageSize, movementLastVisible, movementTypeFilter]);
+  }, [companyId, movementPageSize, movementTypeFilter]);
 
 // OwnerDashboardPage.tsx - Correct order
 
 // 1. First define loadNotificationsList
 const loadNotificationsList = useCallback(async (cid = companyId, loadMore = false) => {
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
+  
   if (!cid) return;
   
   if (loadMore) {

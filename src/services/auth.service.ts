@@ -1,3 +1,4 @@
+// src/services/auth.service.ts
 /**
  * auth.service.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -57,8 +58,9 @@ const buildUserProfile = (
   companyId,
   role,
   status:       "active",
-  isSuperAdmin: role === "super_admin",
+  // ─── REMOVED: isSuperAdmin ───
   permissions:  permissions ?? DEFAULT_PERMISSIONS[role],
+  assignedWarehouseId: "",
   createdAt:    new Date(),
   updatedAt:    new Date(),
 });

@@ -43,10 +43,11 @@ import { QueryDocumentSnapshot } from "firebase/firestore";
 import { SaleModal } from "../components/dashboard/SaleModal";
 import { OrderModal } from "../components/dashboard/OrderModal";
 import { StockStateEditor } from "../components/dashboard/StockStateEditor";
+import { CompanySettingsModal } from "../components/dashboard/CompanySettingsModal";
 
 // ─── REMOVED: MdCreditCard import ───
 
-type OTab = "dashboard" | "staff" | "warehouses" | "categories" | "transfers" | "movements" | "notifications";
+type OTab = "dashboard" | "staff" | "warehouses" | "categories" | "transfers" | "movements" | "notifications" | "settings";
 type DView = "dashboard"|"add-product";
 type AddStaffForm = {
   displayName: string;
@@ -2323,6 +2324,15 @@ const getTimeAgo = (date: Date): string => {
       loadPendingOrders();
       refreshAllData();
     }}
+  />
+)}
+
+{oTab === "settings" && (
+  <CompanySettingsModal
+    companyId={companyId}
+    staffList={staff}
+    onClose={() => setOTab("dashboard")}
+    onStaffUpdated={loadStaff}
   />
 )}
     </div>

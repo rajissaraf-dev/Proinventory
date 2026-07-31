@@ -120,7 +120,11 @@ const bottomNav: NavItem[] = [
     onClick: () => navigate("/messages"), 
     badge: messageCount 
   },
-  { label: "Settings", icon: <MdSettings size={18} />, to: "/dashboard" },
+{ 
+  label: "Settings", 
+  icon: <MdSettings size={18} />, 
+  onClick: () => navigate("/dashboard?tab=settings") 
+},
   { label: "Log Out", icon: <MdLogout size={18} />, onClick: handleLogout },
 ];
 

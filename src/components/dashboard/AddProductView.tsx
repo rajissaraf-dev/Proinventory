@@ -1,4 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+// src/components/dashboard/AddProductView.tsx
+
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
 import imageCompression from "browser-image-compression";
 import { MdImage, MdSave, MdCloudUpload } from "react-icons/md";
@@ -17,7 +19,32 @@ interface AddProductViewProps {
   onSaved: () => void;
 }
 
-const CURRENCIES = ["USD", "EUR", "GBP", "NGN", "CAD", "AUD"];
+// ─── Currency Configuration ───
+interface CurrencyConfig {
+  symbol: string;
+  code: string;
+  locale: string;
+}
+
+const CURRENCIES: Record<string, CurrencyConfig> = {
+  NGN: { symbol: "₦", code: "NGN", locale: "en-NG" },
+  USD: { symbol: "$", code: "USD", locale: "en-US" },
+  EUR: { symbol: "€", code: "EUR", locale: "de-DE" },
+  GBP: { symbol: "£", code: "GBP", locale: "en-GB" },
+  GHS: { symbol: "₵", code: "GHS", locale: "en-GH" },
+  KES: { symbol: "KSh", code: "KES", locale: "en-KE" },
+  ZAR: { symbol: "R", code: "ZAR", locale: "en-ZA" },
+  JPY: { symbol: "¥", code: "JPY", locale: "ja-JP" },
+  CNY: { symbol: "¥", code: "CNY", locale: "zh-CN" },
+  INR: { symbol: "₹", code: "INR", locale: "en-IN" },
+  AUD: { symbol: "A$", code: "AUD", locale: "en-AU" },
+  CAD: { symbol: "C$", code: "CAD", locale: "en-CA" },
+};
+
+const DEFAULT_CURRENCY = CURRENCIES.NGN;
+
+// ─── Currency options for dropdown ───
+const CURRENCY_OPTIONS = Object.values(CURRENCIES).sort((a, b) => a.code.localeCompare(b.code));
 
 const TIPS = [
   { icon: <MdImage size={20} />, iconBg: "var(--color-nav-active-bg)", iconColor: "var(--color-brand-primary-soft)", title: "High Quality Images", desc: "Use clear, high-resolution images for better visibility." },
@@ -46,26 +73,66 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
   const [productName, setProductName] = useState("");
   const [category, setCategory]       = useState("");
   const [warehouseId, setWarehouseId] = useState("");
-  const [currency, setCurrency]       = useState("USD");
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyConfig>(DEFAULT_CURRENCY);
   const [price, setPrice]             = useState("");
   const [qty, setQty]                 = useState("");
   const [size, setSize]               = useState("");
   const [description, setDescription] = useState("");
-  const [imgFile, setImgFile]         = useState<File | null>(null);
   const [imgPreview, setImgPreview]   = useState<string | null>(null);
   const [imgUrl, setImgUrl]           = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError]             = useState("");
   const [saving, setSaving]           = useState(false);
+  const [currencyLoading, setCurrencyLoading] = useState(true);
 
   const scopedWarehouses = hasWarehouseScope && assignedWarehouseId
     ? warehouses.filter((warehouse) => warehouse.id === assignedWarehouseId)
     : warehouses;
 
+ // ─── Load currency from settings ───
+// ─── Load currency from settings ───
+  const loadCurrency = useCallback(async (activeCompanyId: string) => {
+    if (!activeCompanyId) {
+      setSelectedCurrency(CURRENCIES.NGN);
+      setCurrencyLoading(false);
+      return;
+    }
+
+    setCurrencyLoading(true);
+    try {
+      const { doc, getDoc } = await import("firebase/firestore");
+      const { default: db } = await import("../../services/firebase");
+      
+      const settingsRef = doc(db, "companies", activeCompanyId, "settings", "general");
+      const settingsSnap = await getDoc(settingsRef);
+
+      if (settingsSnap.exists()) {
+        const settings = settingsSnap.data();
+        const code = (settings.currency || "NGN").toUpperCase().trim();
+        const currency = CURRENCIES[code] || CURRENCIES.NGN;
+        
+        setSelectedCurrency(currency);
+        console.log(`💰 Currency successfully loaded: ${currency.symbol} (${currency.code})`);
+      } else {
+        console.warn("⚠️ Document 'companies/" + activeCompanyId + "/settings/general' not found. Defaulting to NGN.");
+        setSelectedCurrency(CURRENCIES.NGN);
+      }
+    } catch (err) {
+      console.error("Failed to load currency settings, defaulting to NGN:", err);
+      setSelectedCurrency(CURRENCIES.NGN);
+    } finally {
+      setCurrencyLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!companyId) return;
+    if (!companyId) {
+      // If companyId isn't loaded from Redux yet, keep waiting
+      return;
+    }
 
     let cancelled = false;
+
     const loadCategories = async () => {
       setCategoriesLoading(true);
       try {
@@ -73,13 +140,9 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
         if (cancelled) return;
         setCategories(list.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (err) {
-        if (!cancelled) {
-          setError((err as Error).message || "Failed to load categories.");
-        }
+        if (!cancelled) setError((err as Error).message || "Failed to load categories.");
       } finally {
-        if (!cancelled) {
-          setCategoriesLoading(false);
-        }
+        if (!cancelled) setCategoriesLoading(false);
       }
     };
 
@@ -97,22 +160,42 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
 
         setWarehouseId((current) => current || defaultWarehouseId);
       } catch (err) {
-        if (!cancelled) {
-          setError((err as Error).message || "Failed to load warehouses.");
-        }
+        if (!cancelled) setError((err as Error).message || "Failed to load warehouses.");
       } finally {
-        if (!cancelled) {
-          setWarehousesLoading(false);
-        }
+        if (!cancelled) setWarehousesLoading(false);
       }
     };
 
     void loadCategories();
     void loadWarehouses();
+    void loadCurrency(companyId);
+
     return () => {
       cancelled = true;
     };
-  }, [companyId, assignedWarehouseId, hasWarehouseScope]);
+  }, [companyId, assignedWarehouseId, hasWarehouseScope, loadCurrency]);
+  // ─── Handle currency change ───
+  const handleCurrencyChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const code = e.target.value;
+    const currency = CURRENCIES[code] || DEFAULT_CURRENCY;
+    setSelectedCurrency(currency);
+    console.log(`💰 Currency changed to: ${currency.symbol} (${currency.code})`);
+    
+    // ─── Save currency preference ───
+    try {
+      const { doc, updateDoc } = await import("firebase/firestore");
+      const { default: db } = await import("../../services/firebase");
+      const settingsRef = doc(db, "companies", companyId, "settings", "general");
+      await updateDoc(settingsRef, {
+        currency: currency.code,
+        currencySymbol: currency.symbol,
+        updatedAt: new Date(),
+      });
+      console.log(`✅ Currency saved to settings: ${currency.code}`);
+    } catch (err) {
+      console.warn("Failed to save currency preference:", err);
+    }
+  };
 
   /* ── File picker handler ── */
   const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,7 +212,6 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
       ? await imageCompression(f, { maxSizeMB: 1, maxWidthOrHeight: 1200 })
       : f;
 
-    setImgFile(compressed);
     setImgPreview(URL.createObjectURL(compressed));
     setUploadProgress(0);
 
@@ -144,10 +226,20 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
   };
 
   /* ── Drag & drop ── */
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const f = e.dataTransfer.files[0];
-    if (f) handleFilePick({ target: { files: [f] } } as any);
+    if (f) {
+      const input = fileInputRef.current;
+      if (input) {
+        const dt = new DataTransfer();
+        dt.items.add(f);
+        input.files = dt.files;
+        const changeEvent = new Event('change', { bubbles: true });
+        input.dispatchEvent(changeEvent);
+        handleFilePick({ target: { files: dt.files } } as React.ChangeEvent<HTMLInputElement>);
+      }
+    }
   };
 
   /* ── Save ── */
@@ -199,6 +291,17 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
 
   /* ── Input shared class ── */
   const inputCls = "w-full rounded-lg px-3 py-2.5 text-sm transition-all";
+
+  if (currencyLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: "var(--color-brand-primary)" }} />
+          <p className="text-sm mt-3" style={{ color: "var(--color-text-muted)" }}>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-full">
@@ -395,32 +498,46 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
                 </div>
               </div>
 
-              {/* Price row */}
+              {/* ─── FIXED: Price with Currency Selection ─── */}
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-secondary)" }}>
-                  Price
+                  Price <span style={{ color: "var(--color-danger)" }}>*</span>
                 </label>
                 <div className="flex gap-2">
-                  {/* Currency selector */}
+                  {/* ─── Currency Selector Dropdown ─── */}
                   <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                    className="rounded-lg px-3 py-2.5 text-sm w-24 shrink-0"
-                    style={{ ...INPUT_STYLE }}
+                    value={selectedCurrency.code}
+                    onChange={handleCurrencyChange}
+                    className="rounded-lg px-3 py-2.5 text-sm w-28 shrink-0 appearance-none font-medium cursor-pointer"
+                    style={{
+                      ...INPUT_STYLE,
+                      background: "var(--color-surface-3)",
+                      paddingRight: "2rem",
+                      borderColor: "var(--color-border-medium)",
+                    }}
+                    onFocus={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border-brand)")}
+                    onBlur={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border-medium)")}
                   >
-                    {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
+                    {CURRENCY_OPTIONS.map((curr) => (
+                      <option key={curr.code} value={curr.code}>
+                        {curr.symbol} {curr.code}
+                      </option>
+                    ))}
                   </select>
-                  {/* Price input */}
+
+                  {/* ─── Price Input with Dynamic Symbol ─── */}
                   <div className="relative flex-1">
                     <span
                       className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold"
                       style={{ color: "var(--color-input-icon)" }}
-                    >$</span>
+                    >
+                      {selectedCurrency.symbol}
+                    </span>
                     <input
                       type="number"
                       value={price}
                       onChange={(e) => setPrice(e.target.value)}
-                      placeholder="0.00"
+                      placeholder={`Enter price in ${selectedCurrency.code}`}
                       min={0}
                       step="0.01"
                       className={`${inputCls} pl-7`}
@@ -429,6 +546,21 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
                       onBlur={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-input-border)")}
                     />
                   </div>
+                </div>
+                {/* ─── Price Preview with Currency ─── */}
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+                    {price && Number(price) > 0 
+                      ? `${selectedCurrency.symbol}${Number(price).toFixed(2)} ${selectedCurrency.code}`
+                      : `Enter price in ${selectedCurrency.code}`}
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded flex items-center gap-1" 
+                    style={{ background: "var(--color-surface-3)", color: "var(--color-text-faint)" }}>
+                    <span className="font-semibold" style={{ color: "var(--color-text-primary)" }}>
+                      {selectedCurrency.symbol}
+                    </span>
+                    {selectedCurrency.code}
+                  </span>
                 </div>
               </div>
 
@@ -461,7 +593,7 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
                     style={INPUT_STYLE}
                   >
                     <option value="" disabled>Select</option>
-                    {["Pack", "Carton", "Piece", "Sachet", "Bag"].map((s) => <option key={s}>{s}</option>)}
+                    {["Pack", "Carton", "Piece", "Sachet", "Bag", "Box", "Bottle"].map((s) => <option key={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
@@ -552,14 +684,14 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
                 </p>
 
                 {/* Upload progress */}
-{uploadProgress !== null && (
-          <div
-            className="w-full h-1.5 rounded-full overflow-hidden mb-3"
-            style={{ background: "var(--color-surface-4)" }}
-          >
-            <div
-              className="h-full rounded-full transition-all"
-              style={{ width: `${Math.max(uploadProgress, 5)}%`, background: "var(--color-brand-primary)" }}
+                {uploadProgress !== null && (
+                  <div
+                    className="w-full h-1.5 rounded-full overflow-hidden mb-3"
+                    style={{ background: "var(--color-surface-4)" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.max(uploadProgress, 5)}%`, background: "var(--color-brand-primary)" }}
                     />
                   </div>
                 )}

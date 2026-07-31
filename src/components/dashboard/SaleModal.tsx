@@ -408,8 +408,7 @@ useEffect(() => {
         {/* ─── Header ─── */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: "var(--color-brand-primary-soft)" }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white">
               <MdShoppingCart size={20} style={{ color: "var(--color-brand-primary)" }} />
             </div>
             <div>

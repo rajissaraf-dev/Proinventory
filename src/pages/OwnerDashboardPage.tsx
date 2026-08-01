@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { Notification } from "../services/notification.service";
 import {
   MdDashboard, MdPeople,
@@ -211,29 +211,50 @@ const AddStaffModal = ({
   );
 };
 
+
+
 /* ─── Main Page ────────────────────────────────────────────── */
 const OwnerDashboardPage = () => {
   const companyId          = useAppSelector(s=>s.auth.profile?.companyId ?? s.auth.user?.companyId)??"";
   const company            = useAppSelector(s=>s.company.company);
+  const [, setSearchParams] = useSearchParams()
   const products           = useAppSelector(s=>s.stock.productData);
   const location           = useLocation();
   const { profile, isOwner, canDeleteProduct, hasWarehouseScope, assignedWarehouseId } = useRole();
   // ─── REMOVED: isTrial, daysLeft, isGuest from useCompanyAccess ───
   // const { hasAccess } = useCompanyAccess();
 
-  const canViewWarehouse = (
-    warehouseId: string, 
-    role?: string, 
-    assignedId?: string, 
-    isDefault?: boolean
-  ) => {
-    if (role === 'company_owner' || role === 'company_admin') {
-      return true;
-    }
-    return isDefault || warehouseId === 'main_warehouse' || warehouseId === assignedId;
-  };
+// Around line 138
+const canViewWarehouse = (
+  warehouseId: string, 
+  role?: string, 
+  assignedId?: string, 
+  isDefault?: boolean
+) => {
+  // Owner can see all warehouses
+  if (role === 'company_owner') {
+    return true;
+  }
+  
+  // If user has an assigned warehouse, restrict to that warehouse
+  if (assignedId) {
+    return warehouseId === assignedId;
+  }
+  
+  // Admins without assigned warehouse can see all
+  if (role === 'company_admin') {
+    return true;
+  }
+  
+  // Staff fallback
+  return isDefault || warehouseId === 'main_warehouse';
+};
 
   const [oTab,    setOTab]    = useState<OTab>("dashboard");
+  // Add this helper function:
+const setActiveTab = (tab: OTab) => {
+  setOTab(tab);
+};
   const [dView,   setDView]   = useState<DView>("dashboard");
   const [sideCol, setSideCol] = useState(false);
   const [editId,  setEditId]  = useState<string|null>(null);
@@ -307,6 +328,7 @@ const OwnerDashboardPage = () => {
   }, [transferLastVisible]);
 
 
+
   // Notifications state
 const [notifications, setNotifications] = useState<Notification[]>([]);
 const [notificationsLoading, setNotificationsLoading] = useState(false);
@@ -342,14 +364,29 @@ const [showMultiSaleModal, setShowMultiSaleModal] = useState(false);
   const movementLastVisibleRef = useRef<QueryDocumentSnapshot | null>(null);
   const transferLastVisibleRef = useRef<QueryDocumentSnapshot | null>(null);
 
-  useEffect(() => {
+useEffect(() => {
     const tabParam = new URLSearchParams(location.search).get("tab");
-    // ─── REMOVED: "plan" from allowedTabs ───
-    const allowedTabs: OTab[] = ["dashboard", "staff", "warehouses", "categories", "transfers", "movements", "notifications"];
+    const allowedTabs: OTab[] = [
+      "dashboard", 
+      "staff", 
+      "warehouses", 
+      "categories", 
+      "transfers", 
+      "movements", 
+      "notifications", 
+      "settings" // ← ADD THIS
+    ];
     if (tabParam && allowedTabs.includes(tabParam as OTab)) {
       setOTab(tabParam as OTab);
     }
   }, [location.search]);
+
+  // Handler to close the settings modal and revert to main dashboard tab
+  const handleCloseSettings = () => {
+    setSearchParams({ tab: "dashboard" });
+    setActiveTab("dashboard");
+  };
+
 
   const sideW = sideCol?64:220;
 
@@ -393,9 +430,9 @@ const [showMultiSaleModal, setShowMultiSaleModal] = useState(false);
       });
   }, [previewWarehouseId, products, warehouseInventory]);
 
-  const totalValue = displayedProducts.reduce((a,p)=>a+((p.stockQuantity ?? p.product_Qty ?? 0)*(p.price ?? p.product_Price ?? 0)),0);
-  const totalStock = displayedProducts.reduce((a,p)=>a+(p.stockQuantity ?? p.product_Qty ?? 0),0);
-  const outOfStock = displayedProducts.filter(p=>(p.stockQuantity ?? p.product_Qty ?? 0)===0).length;
+  // const totalInventoryValue = displayedProducts.reduce((a,p)=>a+((p.stockQuantity ?? p.product_Qty ?? 0)*(p.price ?? p.product_Price ?? 0)),0);
+  // const totalStockOnHand = displayedProducts.reduce((a,p)=>a+(p.stockQuantity ?? p.product_Qty ?? 0),0);
+  
   
 const editItem = products.find(p => p.id === editId);
 const editItemWarehouseStock = editItem ? 
@@ -443,38 +480,60 @@ const loadNotifications = useCallback(async (cid = companyId) => {
     }
   }, [company?.ownerId, companyId, profile?.uid]);
 
-  const loadWarehouses = useCallback(async (cid = companyId) => {
-    if (!cid) return;
-    setWhLoading(true);
-    try {
-      const list = await WarehouseService.list(cid);
+const loadWarehouses = useCallback(async (cid = companyId) => {
+  if (!cid) return;
+  setWhLoading(true);
+  try {
+    const list = await WarehouseService.list(cid);
+    
+    console.log('📦 [loadWarehouses] All warehouses:', list.map(w => ({ id: w.id, name: w.name, isDefault: w.isDefault })));
+    console.log('👤 [loadWarehouses] User role:', profile?.role, 'assignedWarehouseId:', assignedWarehouseId);
 
-      const scopedList = list.filter((wh) =>
-        canViewWarehouse(wh.id, profile?.role, assignedWarehouseId, wh.isDefault)
-      );
-      const sorted = scopedList.sort((a, b) => a.name.localeCompare(b.name));
-      const inventoryMap: Record<string, InventoryRecord[]> = {};
-      const inventoryLists = await Promise.all(
-        sorted.map((warehouse) => InventoryService.listByWarehouse(cid, warehouse.id))
-      );
+    const scopedList = list.filter((wh) =>
+      canViewWarehouse(wh.id, profile?.role, assignedWarehouseId, wh.isDefault)
+    );
+    
+    console.log('🔍 [loadWarehouses] Scoped warehouses:', scopedList.map(w => ({ id: w.id, name: w.name })));
+    
+    const sorted = scopedList.sort((a, b) => a.name.localeCompare(b.name));
+    const inventoryMap: Record<string, InventoryRecord[]> = {};
+    const inventoryLists = await Promise.all(
+      sorted.map((warehouse) => InventoryService.listByWarehouse(cid, warehouse.id))
+    );
 
-      sorted.forEach((warehouse, index) => {
-        inventoryMap[warehouse.id] = inventoryLists[index]
-          .sort((a, b) => a.productName.localeCompare(b.productName));
-      });
+    sorted.forEach((warehouse, index) => {
+      inventoryMap[warehouse.id] = inventoryLists[index]
+        .sort((a, b) => a.productName.localeCompare(b.productName));
+    });
 
-      setWarehouses(sorted);
-      setWarehouseInventory(inventoryMap);
-      
-      if (previewWarehouseId && sorted.some(w => w.id === previewWarehouseId)) {
-        setSelectedWarehouseId(previewWarehouseId);
-      }
-    } catch (error) {
-      console.error("Failed to load warehouses:", error);
-    } finally {
-      setWhLoading(false);
+    console.log('📊 [loadWarehouses] Inventory map keys:', Object.keys(inventoryMap));
+
+    setWarehouses(sorted);
+    setWarehouseInventory(inventoryMap);
+    
+    // ✅ CRITICAL: For users with assigned warehouse, force use it
+    if (assignedWarehouseId && sorted.some(w => w.id === assignedWarehouseId)) {
+      setSelectedWarehouseId(assignedWarehouseId);
+    } else if (previewWarehouseId && sorted.some(w => w.id === previewWarehouseId)) {
+      setSelectedWarehouseId(previewWarehouseId);
+    } else if (sorted.length > 0) {
+      setSelectedWarehouseId(sorted[0].id);
     }
-  }, [assignedWarehouseId, companyId, profile?.role, previewWarehouseId]);
+  } catch (error) {
+    console.error("Failed to load warehouses:", error);
+  } finally {
+    setWhLoading(false);
+  }
+}, [assignedWarehouseId, companyId, profile?.role, previewWarehouseId]);
+
+useEffect(() => {
+  // Force reload warehouses when sub-warehouse staff logs in
+  if (companyId && hasWarehouseScope && assignedWarehouseId) {
+    console.log('🔄 [OwnerDashboard] Sub-warehouse staff detected, loading assigned warehouse:', assignedWarehouseId);
+    loadWarehouses();
+  }
+}, [companyId, hasWarehouseScope, assignedWarehouseId, loadWarehouses]);
+
 
   const loadCategories = useCallback(async (cid = companyId) => {
     if (!cid) return;
@@ -1026,7 +1085,7 @@ const getTimeAgo = (date: Date): string => {
   const canCreateTransfer = isOwner || hasWarehouseScope;
 
   // ─── UPDATED TABS: Removed "plan" ───
-  const TABS: { id: OTab; icon: React.ReactNode; label: string }[] = [
+const TABS: { id: OTab; icon: React.ReactNode; label: string }[] = [
   { id: "dashboard", icon: <MdDashboard size={15} />, label: "Dashboard" },
   ...(isOwner ? [{ id: "staff" as OTab, icon: <MdPeople size={15} />, label: "Staff" }] : []),
   { id: "warehouses", icon: <MdWarehouse size={15} />, label: "Warehouses" },
@@ -1034,7 +1093,51 @@ const getTimeAgo = (date: Date): string => {
   { id: "transfers", icon: <MdSwapHoriz size={15} />, label: "Transfers" },
   { id: "movements", icon: <MdInventory2 size={15} />, label: "Stock Log" },
   { id: "notifications", icon: <MdNotifications size={15} />, label: "Notifications" },
+  ...(isOwner ? [{ id: "settings" as OTab, icon: <MdLock size={15} />, label: "Settings" }] : []),
 ];
+
+// 1. Fallback assignedWarehouseId check
+const effectiveWarehouseId = isOwner 
+  ? selectedWarehouseId 
+  : (assignedWarehouseId ?? null);
+
+  // Allow Owners AND staff with explicitly granted permission to view total inventory value
+// Replace line 604:
+const canViewFinancials = isOwner
+// ─── Filter Products by Active Scope ───
+const scopedProducts = useMemo(() => {
+  // For owners with "All Warehouses" selected, show all displayed products
+  if (isOwner && !selectedWarehouseId) {
+    return displayedProducts;
+  }
+  
+  // For non-owners or owners with a specific warehouse selected,
+  // displayedProducts already filters by warehouse
+  return displayedProducts;
+}, [displayedProducts, isOwner, selectedWarehouseId]);
+
+// ─── Compute Metrics ───
+const totalStockOnHand = useMemo(() => {
+  return scopedProducts.reduce((sum, p) => sum + (Number(p.stockQuantity) || 0), 0);
+}, [scopedProducts]);
+
+const outOfStockCount = useMemo(() => {
+  return scopedProducts.filter((p) => (Number(p.stockQuantity) || 0) <= 0).length;
+}, [scopedProducts]);
+
+const totalInventoryValue = useMemo(() => {
+  return scopedProducts.reduce((sum, p) => sum + ((Number(p.stockQuantity || p.product_Qty) || 0) * (Number(p.price || p.product_Price) || 0)), 0);
+}, [scopedProducts]);
+
+
+// 2. Safely find warehouse name
+const assignedWarehouseName = useMemo(() => {
+  if (!effectiveWarehouseId) return "Main Warehouse";
+  const found = warehouses.find((w) => String(w.id) === String(effectiveWarehouseId));
+  return found ? found.name : "Main Warehouse";
+}, [warehouses, effectiveWarehouseId]);
+
+
 
   return (
      <div className="min-h-screen overflow-x-hidden" style={{ background:"var(--color-bg-app)" }}>
@@ -1129,7 +1232,7 @@ const getTimeAgo = (date: Date): string => {
                     </p>
                   </div>
                   <div className="min-w-55">
-                    <select
+                    {/* <select
                       value={previewWarehouseId}
                       onChange={(e) => setSelectedWarehouseId(e.target.value)}
                       disabled={hasWarehouseScope && !!assignedWarehouseId}
@@ -1139,36 +1242,60 @@ const getTimeAgo = (date: Date): string => {
                       {warehouses.map((warehouse) => (
                         <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
                       ))}
-                    </select>
+                    </select> */}
+
+                    {/* Warehouse Selector Dropdown */}
+{/* Warehouse Selector / Header View */}
+{isOwner ? (
+  <select
+    value={selectedWarehouseId ?? ""}
+    onChange={(e) => setSelectedWarehouseId(e.target.value)}
+    
+    className="rounded-xl px-3 py-2 text-xs outline-none w-full"
+    style={S}
+  >
+    <option value="">All Warehouses</option>
+    {warehouses.map((w) => (
+      <option key={w.id} value={w.id}>
+        {w.name}
+      </option>
+    ))}
+  </select>
+) : (
+  /* Warehouse Admin: Restricted view to their assigned warehouse only */
+  <div className="px-3 py-1.5 font-semibold text-sm flex items-center gap-1.5" style={{ color: "var(--color-text-primary)" }}>
+    <span>📍</span>
+    <span>{assignedWarehouseName}</span>
+  </div>
+)}
                   </div>
                 </div>
                 {/* ── Stat Cards ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               
               {/* ── Total Inventory Value (Restricted for Staff) ── */}
-              <StatCard 
-                title="Total Inventory Value" 
-                value={
-                  isOwner
-                    ? `$${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                    : "🔒 Restricted"
-                } 
-                change={isOwner ? 5.2 : undefined} 
-                sparkData={isOwner ? SPARKS.value : undefined} 
-                sparkColor={isOwner ? "var(--color-chart-indigo)" : undefined} 
-                iconBg={isOwner ? "var(--color-nav-active-bg)" : "var(--color-surface-3)"} 
-                icon={
-                  isOwner ? (
-                    <MdAttachMoney size={18} style={{ color: "var(--color-brand-primary-soft)" }} />
-                  ) : (
-                    <MdLock size={18} style={{ color: "var(--color-text-faint)" }} />
-                  )
-                }
-              />
-              
+ <StatCard 
+  title="Total Inventory Value" 
+  value={
+    canViewFinancials
+      ? `$${totalInventoryValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+      : "🔒 Restricted"
+  } 
+  change={canViewFinancials ? 5.2 : undefined} 
+  sparkData={canViewFinancials ? SPARKS.value : undefined} 
+  sparkColor={canViewFinancials ? "var(--color-chart-indigo)" : undefined} 
+  iconBg={canViewFinancials ? "var(--color-nav-active-bg)" : "var(--color-surface-3)"} 
+  icon={
+    canViewFinancials ? (
+      <MdAttachMoney size={18} style={{ color: "var(--color-brand-primary-soft)" }} />
+    ) : (
+      <MdLock size={18} style={{ color: "var(--color-text-faint)" }} />
+    )
+  }
+/>              
               <StatCard 
                 title="Stock on Hand" 
-                value={totalStock.toLocaleString()} 
+                value={totalStockOnHand.toLocaleString()} 
                 change={3.7} 
                 sparkData={SPARKS.stock} 
                 sparkColor="var(--color-chart-green)" 
@@ -1178,7 +1305,7 @@ const getTimeAgo = (date: Date): string => {
               
               <StatCard 
                 title="Out of Stock" 
-                value={String(outOfStock)} 
+                value={String(outOfStockCount)} 
                 change={-12.4} 
                 sparkData={SPARKS.out} 
                 sparkColor="var(--color-chart-red)" 
@@ -1752,72 +1879,113 @@ const getTimeAgo = (date: Date): string => {
                         completed: "var(--color-stock-in-soft)",
                         cancelled: "var(--color-danger-soft)",
                       };
-                      const canConfirm = isOwner
-                        ? t.status === "pending" || t.status === "in_transit"
-                        : hasWarehouseScope && assignedWarehouseId
-                          ? t.toWarehouseId === assignedWarehouseId && (t.status === "pending" || t.status === "in_transit")
-                          : false;
-                      const canCancel = isOwner && (t.status === "draft" || t.status === "pending" || t.status === "in_transit");
-                      const totalItems = (t.items ?? []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+                      //  const canConfirm = isOwner
+                      //   ? t.status === "pending" || t.status === "in_transit"
+                      //   : hasWarehouseScope && assignedWarehouseId
+                      //     ? t.toWarehouseId === assignedWarehouseId && (t.status === "pending" || t.status === "in_transit")
+                      //     : false;
+                      // const canCancel = isOwner && (t.status === "draft" || t.status === "pending" || t.status === "in_transit");
+                      // const totalItems = (t.items ?? []).reduce((sum, item) => sum + (item.quantity || 0), 0);
                       
-                      return (
-                        <tr key={t.id} style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
-                          onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-2)")}
-                          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                          <td className="px-4 py-3 font-mono text-[10px]" style={{ color: "var(--color-text-muted)" }}>{t.transferNumber}</td>
-                          <td className="px-4 py-3" style={{ color: "var(--color-text-secondary)" }}>{t.fromWarehouseName}</td>
-                          <td className="px-4 py-3" style={{ color: "var(--color-text-secondary)" }}>{t.toWarehouseName}</td>
-                          <td className="px-4 py-3" style={{ color: "var(--color-text-secondary)" }}>
-                            <div className="space-y-1">
-                              {(t.items ?? []).map((item) => (
-                                <div key={item.id ?? `${t.id}-${item.productId}`} className="flex items-center justify-between gap-2">
-                                  <span>{item.productName}</span>
-                                  <span className="font-semibold" style={{ color: "var(--color-brand-primary-soft)" }}>{item.quantity}</span>
-                                </div>
-                              ))}
-                              <div className="text-[10px] font-semibold pt-1" style={{ color: "var(--color-text-faint)" }}>
-                                Total: {totalItems} items
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
-                              style={{ background: SB[t.status] ?? "var(--color-surface-3)", color: SC[t.status] ?? "var(--color-text-muted)" }}>
-                              {t.status.replace("_", " ")}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex gap-1 flex-wrap">
-                              {canConfirm && (
-                                <button 
-                                  onClick={() => {
-                                    if (window.confirm(`✅ Confirm Receipt?\n\nTransfer #${t.transferNumber}\nFrom: ${t.fromWarehouseName}\nTo: ${t.toWarehouseName}\nItems: ${totalItems} units\n\nThis will move the stock to the destination warehouse. This action cannot be undone.`)) {
-                                      updateTransfer(t.id, "completed");
-                                    }
-                                  }} 
-                                  className="px-2 py-1 rounded text-[10px] font-semibold transition-colors hover:opacity-80"
-                                  style={{ background: "var(--color-stock-in-soft)", color: "var(--color-stock-in)" }}
-                                >
-                                  Confirm Receipt
-                                </button>
-                              )}
-                              {canCancel && (
-                                <button 
-                                  onClick={() => {
-                                    if (window.confirm(`⚠️ Cancel Transfer?\n\nTransfer #${t.transferNumber}\nFrom: ${t.fromWarehouseName}\nTo: ${t.toWarehouseName}\nItems: ${totalItems} units\n\nThis will cancel the transfer and release any reserved stock. This action cannot be undone.`)) {
-                                      updateTransfer(t.id, "cancelled");
-                                    }
-                                  }} 
-                                  className="px-2 py-1 rounded text-[10px] font-semibold transition-colors hover:opacity-80"
-                                  style={{ background: "var(--color-danger-soft)", color: "var(--color-danger)" }}
-                                >
-                                  Cancel
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
+// ─── 1. Coerce IDs to Strings to Avoid Number/String Comparison Mismatches ───
+const currentAssignedId = assignedWarehouseId ? String(assignedWarehouseId) : null;
+const destinationId = t.toWarehouseId ? String(t.toWarehouseId) : null;
+const sourceId = t.fromWarehouseId ? String(t.fromWarehouseId) : null;
+
+// ─── 2. Determine Receiver / Sender Roles ───
+// The logged-in user IS the receiver if their assigned ID matches the destination ID
+const isReceiver = Boolean(currentAssignedId && currentAssignedId === destinationId);
+
+// The logged-in user IS the sender if their assigned ID matches the source ID
+const isSender = Boolean(currentAssignedId && currentAssignedId === sourceId);
+
+// ─── 3. Strict Permissions ───
+// ONLY the destination warehouse staff can confirm receipt
+const canConfirm = isReceiver && (t.status === "pending" || t.status === "in_transit");
+
+// ONLY the sending warehouse staff OR global Owner can cancel
+const canCancel = (isSender || isOwner) && (t.status === "pending" || t.status === "draft");
+
+// ─── 4. Calculate Total Items ───
+const totalItems = (t.items ?? []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+return (
+  <tr key={t.id} style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+    <td className="px-4 py-3 font-mono text-[10px]" style={{ color: "var(--color-text-muted)" }}>{t.transferNumber}</td>
+    <td className="px-4 py-3" style={{ color: "var(--color-text-secondary)" }}>{t.fromWarehouseName}</td>
+    <td className="px-4 py-3" style={{ color: "var(--color-text-secondary)" }}>{t.toWarehouseName}</td>
+    <td className="px-4 py-3" style={{ color: "var(--color-text-secondary)" }}>
+      <div className="space-y-1">
+        {(t.items ?? []).map((item) => (
+          <div key={item.id ?? `${t.id}-${item.productId}`} className="flex items-center justify-between gap-2">
+            <span>{item.productName}</span>
+            <span className="font-semibold" style={{ color: "var(--color-brand-primary-soft)" }}>{item.quantity}</span>
+          </div>
+        ))}
+        <div className="text-[10px] font-semibold pt-1" style={{ color: "var(--color-text-faint)" }}>
+          Total: {totalItems} items
+        </div>
+      </div>
+    </td>
+    <td className="px-4 py-3">
+      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
+        style={{ background: SB[t.status] ?? "var(--color-surface-3)", color: SC[t.status] ?? "var(--color-text-muted)" }}>
+        {t.status.replace("_", " ")}
+      </span>
+    </td>
+
+    {/* ─── 5. Actions Column ─── */}
+    <td className="px-4 py-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        
+        {/* RECEIVER ACTION: Show Confirm Button */}
+        {canConfirm && (
+          <button 
+            onClick={() => {
+              if (window.confirm(`✅ Confirm Receipt of Stock?\n\nTransfer #${t.transferNumber}\nFrom: ${t.fromWarehouseName}\nTo: ${t.toWarehouseName}\n\nPlease verify quantities and item condition before confirming.`)) {
+                updateTransfer(t.id, "completed");
+              }
+            }} 
+            className="px-2.5 py-1 rounded text-[10px] font-semibold transition-colors hover:opacity-80"
+            style={{ background: "var(--color-stock-in-soft)", color: "var(--color-stock-in)" }}
+          >
+            Confirm Receipt
+          </button>
+        )}
+
+        {/* SENDER STATUS: Waiting on Destination */}
+        {isSender && !isOwner && (t.status === "pending" || t.status === "in_transit") && (
+          <span className="text-[11px] font-medium italic" style={{ color: "var(--color-warning)" }}>
+            Awaiting Receiver Confirmation
+          </span>
+        )}
+
+        {/* OWNER STATUS VIEW */}
+        {isOwner && (t.status === "pending" || t.status === "in_transit") && (
+          <span className="text-[11px] font-medium italic" style={{ color: "var(--color-text-muted)" }}>
+            Pending Destination Receipt
+          </span>
+        )}
+
+        {/* CANCEL ACTION */}
+        {canCancel && (
+          <button 
+            onClick={() => {
+              if (window.confirm(`⚠️ Cancel Transfer #${t.transferNumber}?`)) {
+                updateTransfer(t.id, "cancelled");
+              }
+            }} 
+            className="px-2 py-1 rounded text-[10px] font-semibold transition-colors hover:opacity-80"
+            style={{ background: "var(--color-danger-soft)", color: "var(--color-danger)" }}
+          >
+            Cancel
+          </button>
+        )}
+
+      </div>
+    </td>
+  </tr>
+);
                     })
                   )}
                   
@@ -2327,14 +2495,19 @@ const getTimeAgo = (date: Date): string => {
   />
 )}
 
-{oTab === "settings" && (
-  <CompanySettingsModal
-    companyId={companyId}
-    staffList={staff}
-    onClose={() => setOTab("dashboard")}
-    onStaffUpdated={loadStaff}
-  />
-)}
+{/* RENDER THE SETTINGS MODAL WHEN "settings" IS ACTIVE */}
+      {oTab === "settings" && (
+        <CompanySettingsModal
+          companyId={companyId}
+          staffList={staff}
+          onClose={handleCloseSettings}
+          onStaffUpdated={loadStaff}
+          onSettingsUpdated={() => {
+            // Optional callback to refresh company/warehouse data
+            loadWarehouses();
+          }}
+        />
+      )}
     </div>
   );
 };

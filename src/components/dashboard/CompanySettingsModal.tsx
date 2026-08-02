@@ -24,8 +24,10 @@ export const CompanySettingsModal: React.FC<Props> = ({
   onSettingsUpdated,
 }) => {
   const [currency, setCurrency] = useState("USD");
+  const [currencySymbol, setCurrencySymbol] = useState("$");
   const [lowStockThreshold, setLowStockThreshold] = useState(10);
   const [logoUrl, setLogoUrl] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
@@ -34,8 +36,10 @@ export const CompanySettingsModal: React.FC<Props> = ({
     if (!companyId) return;
     CompanySettingsService.getSettings(companyId).then((data) => {
       setCurrency(data.currency);
+      setCurrencySymbol(data.currencySymbol || data.currency || "$" );
       setLowStockThreshold(data.lowStockThreshold);
       setLogoUrl(data.logoUrl || "");
+      setCompanyName(data.companyName || "");
     });
   }, [companyId]);
 
@@ -52,9 +56,8 @@ export const CompanySettingsModal: React.FC<Props> = ({
       const uploadedUrl = await uploadImageToCloudinary(file, "company_logos");
       setLogoUrl(uploadedUrl);
       setMessage({ text: "Logo uploaded successfully!", type: "success" });
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to upload logo";
-      setMessage({ text: errorMsg, type: "error" });
+    } catch {
+      setMessage({ text: "Failed to upload logo", type: "error" });
     } finally {
       setUploadingLogo(false);
     }
@@ -66,7 +69,7 @@ export const CompanySettingsModal: React.FC<Props> = ({
       await CompanyUserService.updateRole(companyId, uid, newRole);
       onStaffUpdated();
       setMessage({ text: "Staff role updated.", type: "success" });
-    } catch (err) {
+    } catch {
       setMessage({ text: "Failed to update role.", type: "error" });
     }
   };
@@ -78,12 +81,14 @@ export const CompanySettingsModal: React.FC<Props> = ({
     try {
       await CompanySettingsService.updateSettings(companyId, {
         currency,
+        currencySymbol,
         lowStockThreshold,
         logoUrl,
+        companyName,
       });
       setMessage({ text: "Settings saved successfully!", type: "success" });
       if (onSettingsUpdated) onSettingsUpdated();
-    } catch (err) {
+    } catch {
       setMessage({ text: "Failed to save settings.", type: "error" });
     } finally {
       setLoading(false);
@@ -100,7 +105,7 @@ export const CompanySettingsModal: React.FC<Props> = ({
           color: "var(--color-text-primary)",
         }}
       >
-        <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border-subtle)]">
+        <div className="flex items-center justify-between pb-4 border-b border-(--color-border-subtle)">
           <h2 className="text-lg font-semibold">Company Settings</h2>
           <button onClick={onClose} className="p-1 hover:opacity-75">
             <MdClose size={20} />
@@ -128,14 +133,14 @@ export const CompanySettingsModal: React.FC<Props> = ({
                 <img
                   src={logoUrl}
                   alt="Company Logo"
-                  className="w-16 h-16 rounded-xl object-cover border border-[var(--color-border-soft)]"
+                  className="w-16 h-16 rounded-xl object-cover border border-(--color-border-soft)"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-xl border border-dashed border-[var(--color-border-soft)] flex items-center justify-center text-xs text-[var(--color-text-muted)]">
+                <div className="w-16 h-16 rounded-xl border border-dashed border-(--color-border-soft) flex items-center justify-center text-xs text-(--color-text-muted)">
                   No Logo
                 </div>
               )}
-              <label className="cursor-pointer px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-[var(--color-surface-3)] hover:opacity-80">
+              <label className="cursor-pointer px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-(--color-surface-3) hover:opacity-80">
                 <MdCloudUpload size={16} />
                 {uploadingLogo ? "Uploading..." : "Upload Logo"}
                 <input
@@ -149,16 +154,38 @@ export const CompanySettingsModal: React.FC<Props> = ({
             </div>
           </div>
 
+          <div>
+            <label className="block text-xs font-medium mb-1">Company Name</label>
+            <input
+              type="text"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="e.g. Acme Supplies"
+              className="w-full p-2.5 rounded-xl text-xs bg-(--color-input-bg) border border-(--color-input-border) text-(--color-input-text)"
+            />
+          </div>
+
           {/* Currency & Threshold Inputs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium mb-1">Currency Symbol / Code</label>
+              <label className="block text-xs font-medium mb-1">Currency Code</label>
               <input
                 type="text"
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                placeholder="e.g. USD ($), NGN (₦), EUR (€)"
-                className="w-full p-2.5 rounded-xl text-xs bg-[var(--color-input-bg)] border border-[var(--color-input-border)] text-[var(--color-input-text)]"
+                onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                placeholder="e.g. USD, NGN, EUR"
+                className="w-full p-2.5 rounded-xl text-xs bg-(--color-input-bg) border border-(--color-input-border) text-(--color-input-text)"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Currency Symbol</label>
+              <input
+                type="text"
+                value={currencySymbol}
+                onChange={(e) => setCurrencySymbol(e.target.value)}
+                placeholder="e.g. $, ₦, €"
+                className="w-full p-2.5 rounded-xl text-xs bg-(--color-input-bg) border border-(--color-input-border) text-(--color-input-text)"
                 required
               />
             </div>
@@ -169,7 +196,7 @@ export const CompanySettingsModal: React.FC<Props> = ({
                 min={1}
                 value={lowStockThreshold}
                 onChange={(e) => setLowStockThreshold(Number(e.target.value))}
-                className="w-full p-2.5 rounded-xl text-xs bg-[var(--color-input-bg)] border border-[var(--color-input-border)] text-[var(--color-input-text)]"
+                className="w-full p-2.5 rounded-xl text-xs bg-(--color-input-bg) border border-(--color-input-border) text-(--color-input-text)"
                 required
               />
             </div>
@@ -178,7 +205,7 @@ export const CompanySettingsModal: React.FC<Props> = ({
           <button
             type="submit"
             disabled={loading || uploadingLogo}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-[var(--color-brand-primary)] text-white disabled:opacity-50"
+            className="w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-brand-primary text-white disabled:opacity-50"
           >
             <MdSave size={16} />
             {loading ? "Saving Settings..." : "Save Company Settings"}
@@ -186,25 +213,25 @@ export const CompanySettingsModal: React.FC<Props> = ({
         </form>
 
         {/* Staff Role Management */}
-        <div className="mt-8 pt-4 border-t border-[var(--color-border-subtle)]">
+        <div className="mt-8 pt-4 border-t border-(--color-border-subtle)">
           <h3 className="text-sm font-semibold mb-3">Staff Role Management</h3>
           <div className="space-y-2">
             {staffList.length === 0 ? (
-              <p className="text-xs text-[var(--color-text-muted)]">No staff members found.</p>
+              <p className="text-xs text-(--color-text-muted)">No staff members found.</p>
             ) : (
               staffList.map((member) => (
                 <div
                   key={member.uid}
-                  className="flex items-center justify-between p-3 rounded-xl bg-[var(--color-surface-1)] border border-[var(--color-border-soft)]"
+                  className="flex items-center justify-between p-3 rounded-xl bg-surface-1 border border-(--color-border-soft)"
                 >
                   <div>
                     <p className="text-xs font-semibold">{member.displayName || member.email}</p>
-                    <p className="text-[10px] text-[var(--color-text-muted)]">{member.email}</p>
+                    <p className="text-[10px] text-(--color-text-muted)">{member.email}</p>
                   </div>
                   <select
                     value={member.role}
                     onChange={(e) => handleRoleChange(member.uid, e.target.value as UserRole)}
-                    className="p-1.5 rounded-lg text-xs bg-[var(--color-surface-3)] border border-[var(--color-border-soft)] text-[var(--color-text-secondary)]"
+                    className="p-1.5 rounded-lg text-xs bg-(--color-surface-3) border border-(--color-border-soft) text-(--color-text-secondary)"
                   >
                     {STAFF_ROLES.map((r) => (
                       <option key={r} value={r}>

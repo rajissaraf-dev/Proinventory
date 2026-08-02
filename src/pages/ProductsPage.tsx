@@ -18,6 +18,7 @@ import { SaleModal } from "../components/dashboard/SaleModal";
 import DashboardHeader from "../components/dashboard/DashboardHeader";
 import DashboardSidebar from "../components/dashboard/DashboardSidebar";
 import { toggleSidebar } from "../features/ui/uiSlice";
+import useCompanySettings from "../hooks/useCompanySettings";
 
 const ProductsPage = () => {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ const ProductsPage = () => {
   const products = useAppSelector((s) => s.stock.productData);
   const isSidebarCollapsed = useAppSelector((state) => state.ui?.sidebarCollapsed ?? false);
   const { isOwner, isAdmin, hasWarehouseScope, assignedWarehouseId } = useRole();
+  const { settings } = useCompanySettings(companyId);
 
   // ── State ──
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -184,14 +186,15 @@ const ProductsPage = () => {
 
     // Status filter
     if (selectedStatus) {
+      const threshold = settings.lowStockThreshold || 10;
       const getStockQty = (p: Product) => p.product_Qty ?? p.stockQuantity ?? 0;
       
       switch (selectedStatus) {
         case "in_stock":
-          result = result.filter((p) => getStockQty(p) > 10);
+          result = result.filter((p) => getStockQty(p) > threshold);
           break;
         case "low_stock":
-          result = result.filter((p) => getStockQty(p) > 0 && getStockQty(p) <= 10);
+          result = result.filter((p) => getStockQty(p) > 0 && getStockQty(p) <= threshold);
           break;
         case "out_of_stock":
           result = result.filter((p) => getStockQty(p) === 0);
@@ -203,7 +206,7 @@ const ProductsPage = () => {
 
     setFilteredProducts(result);
     setIsLoading(false);
-  }, [displayedProducts, searchQuery, selectedCategory, selectedStatus]);
+  }, [displayedProducts, searchQuery, selectedCategory, selectedStatus, settings.lowStockThreshold]);
 
   useEffect(() => {
     applyFilters();
@@ -387,7 +390,7 @@ const handleSell = (product: Product) => {
 
           {/* ── Search & Filters ── */}
           <div className="flex flex-wrap items-center gap-3 mb-6">
-            <ProductSearchBar onSearch={handleSearch} className="flex-1 min-w-[200px]" />
+            <ProductSearchBar onSearch={handleSearch} className="flex-1 min-w-50" />
             <ProductFilters
               categories={categories}
               selectedCategory={selectedCategory}

@@ -8,6 +8,8 @@ import { FiChevronRight, FiTag, FiPackage, FiShield, FiDollarSign } from "react-
 import { useAuth } from "../../services/firebase";
 import { RootState } from "../../app/store";
 import { ProductService } from "../../services/product.service";
+import useCompanySettings from "../../hooks/useCompanySettings";
+import { CompanySettingsService } from "../../services/company-settings.service";
 import { CategoryService } from "../../services/category.service";
 import { WarehouseService } from "../../services/warehouse.service";
 import { uploadImageToCloudinary } from "../../services/cloudinary.service";
@@ -64,6 +66,7 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
   const currentUser = useAuth();
   const { assignedWarehouseId, hasWarehouseScope } = useRole();
   const companyId = useSelector((s: RootState) => s.auth.user?.companyId ?? "");
+  const { settings } = useCompanySettings(companyId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -89,8 +92,16 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
     ? warehouses.filter((warehouse) => warehouse.id === assignedWarehouseId)
     : warehouses;
 
- // ─── Load currency from settings ───
-// ─── Load currency from settings ───
+  useEffect(() => {
+    const code = (settings.currency || "NGN").toUpperCase().trim();
+    const currency = CURRENCIES[code] || CURRENCIES.NGN;
+    setSelectedCurrency({
+      ...currency,
+      symbol: settings.currencySymbol || currency.symbol,
+    });
+    setCurrencyLoading(false);
+  }, [settings.currency, settings.currencySymbol]);
+
   const loadCurrency = useCallback(async (activeCompanyId: string) => {
     if (!activeCompanyId) {
       setSelectedCurrency(CURRENCIES.NGN);
@@ -100,23 +111,15 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
 
     setCurrencyLoading(true);
     try {
-      const { doc, getDoc } = await import("firebase/firestore");
-      const { default: db } = await import("../../services/firebase");
-      
-      const settingsRef = doc(db, "companies", activeCompanyId, "settings", "general");
-      const settingsSnap = await getDoc(settingsRef);
+      const companySettings = await CompanySettingsService.getSettings(activeCompanyId);
+      const code = (companySettings.currency || "NGN").toUpperCase().trim();
+      const currency = CURRENCIES[code] || CURRENCIES.NGN;
 
-      if (settingsSnap.exists()) {
-        const settings = settingsSnap.data();
-        const code = (settings.currency || "NGN").toUpperCase().trim();
-        const currency = CURRENCIES[code] || CURRENCIES.NGN;
-        
-        setSelectedCurrency(currency);
-        console.log(`💰 Currency successfully loaded: ${currency.symbol} (${currency.code})`);
-      } else {
-        console.warn("⚠️ Document 'companies/" + activeCompanyId + "/settings/general' not found. Defaulting to NGN.");
-        setSelectedCurrency(CURRENCIES.NGN);
-      }
+      setSelectedCurrency({
+        ...currency,
+        symbol: companySettings.currencySymbol || currency.symbol,
+      });
+      console.log(`💰 Currency successfully loaded: ${currency.symbol} (${currency.code})`);
     } catch (err) {
       console.error("Failed to load currency settings, defaulting to NGN:", err);
       setSelectedCurrency(CURRENCIES.NGN);
@@ -127,7 +130,6 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
 
   useEffect(() => {
     if (!companyId) {
-      // If companyId isn't loaded from Redux yet, keep waiting
       return;
     }
 
@@ -178,18 +180,13 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
   const handleCurrencyChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const code = e.target.value;
     const currency = CURRENCIES[code] || DEFAULT_CURRENCY;
-    setSelectedCurrency(currency);
+    setSelectedCurrency({ ...currency, symbol: currency.symbol });
     console.log(`💰 Currency changed to: ${currency.symbol} (${currency.code})`);
-    
-    // ─── Save currency preference ───
+
     try {
-      const { doc, updateDoc } = await import("firebase/firestore");
-      const { default: db } = await import("../../services/firebase");
-      const settingsRef = doc(db, "companies", companyId, "settings", "general");
-      await updateDoc(settingsRef, {
+      await CompanySettingsService.updateSettings(companyId, {
         currency: currency.code,
         currencySymbol: currency.symbol,
-        updatedAt: new Date(),
       });
       console.log(`✅ Currency saved to settings: ${currency.code}`);
     } catch (err) {
@@ -294,7 +291,7 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
 
   if (currencyLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-100">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: "var(--color-brand-primary)" }} />
           <p className="text-sm mt-3" style={{ color: "var(--color-text-muted)" }}>Loading...</p>

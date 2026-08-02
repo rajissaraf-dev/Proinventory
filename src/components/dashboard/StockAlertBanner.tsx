@@ -1,12 +1,13 @@
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
 import { Product } from "../../types";
-
-const LOW_STOCK_THRESHOLD = 10;
+import useCompanySettings from "../../hooks/useCompanySettings";
 
 const StockAlertBanner = () => {
   const products = useSelector((s: RootState) => s.stock.productData);
-  const lowStock = products.filter((p: Product) => Number(p.product_Qty) <= LOW_STOCK_THRESHOLD);
+  const companyId = useSelector((s: RootState) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
+  const { settings } = useCompanySettings(companyId);
+  const lowStock = products.filter((p: Product) => Number(p.product_Qty) <= (settings.lowStockThreshold || 10));
 
   if (lowStock.length === 0) return null;
 

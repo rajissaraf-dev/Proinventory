@@ -1,6 +1,8 @@
 // src/components/products/ProductTable.tsx
 
 import { Product } from "../../types";
+import useAppSelector from "../../hooks/useAppSelector";
+import useCompanySettings from "../../hooks/useCompanySettings";
 import {
   MdEdit,
   MdDelete,
@@ -36,6 +38,8 @@ const ProductTable = ({
   onAdd,
   warehouseName,
 }: ProductTableProps) => {
+  const companyId = useAppSelector((s) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
+  const { settings } = useCompanySettings(companyId);
   const canEdit = isOwner || isAdmin;
 
   if (isLoading) {
@@ -197,7 +201,7 @@ const ProductTable = ({
                   bg: "var(--color-stock-out-soft)",
                   text: "var(--color-stock-out)",
                 };
-              } else if (stockQty <= 10) {
+              } else if (stockQty <= (settings.lowStockThreshold || 10)) {
                 statusLabel = "Low Stock";
                 statusColor = {
                   bg: "var(--color-stock-low-soft)",
@@ -274,7 +278,7 @@ const ProductTable = ({
                     className="px-4 py-3 text-right font-semibold"
                     style={{ color: "var(--color-text-primary)" }}
                   >
-                    ${(product.price ?? product.product_Price ?? 0).toFixed(2)}
+                    {settings.currencySymbol || "$"}{(product.price ?? product.product_Price ?? 0).toFixed(2)}
                   </td>
                   <td
                     className="px-4 py-3 text-right font-semibold"

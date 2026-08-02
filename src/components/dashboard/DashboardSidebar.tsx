@@ -15,6 +15,7 @@ import { useDispatch } from "react-redux";
 import Logo from "../../assets/img/stocktrack-logo.png";
 import { NotificationService } from "../../services/notification.service";
 import useAppSelector from "../../hooks/useAppSelector";
+import useCompanySettings from "../../hooks/useCompanySettings";
 
 interface NavItem {
   label: string;
@@ -47,6 +48,8 @@ const DashboardSidebar = ({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [localNotificationCount, setLocalNotificationCount] = useState(notificationCount);
   const companyId = useAppSelector(s => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
+  const { settings } = useCompanySettings(companyId);
+  const brandName = settings.companyName?.trim() || "ProInventory";
 
   // Load notification count periodically with better error handling
   useEffect(() => {
@@ -206,11 +209,9 @@ const bottomNav: NavItem[] = [
         style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
       >
         <Link to="/" className="flex items-center gap-2 min-w-0">
-          <img src={Logo} alt="StockTrack" className="w-7 h-7 rounded-lg shrink-0" />
+          <img src={settings.logoUrl || Logo} alt={brandName} className="w-7 h-7 rounded-lg shrink-0 object-cover" />
           {!collapsed && (
-            <span className="text-white font-bold text-base truncate">
-              Pro<span style={{ color: "var(--color-brand-primary-soft)" }}>Inventory</span>
-            </span>
+            <span className="text-white font-bold text-base truncate">{brandName}</span>
           )}
         </Link>
         <button

@@ -27,7 +27,7 @@ const ProductSearchBar = ({
   };
 
   return (
-    <div className={`relative flex-1 min-w-[200px] ${className}`}>
+    <div className={`relative flex-1 min-w-50 ${className}`}>
       <div className="relative">
         <MdSearch
           size={18}

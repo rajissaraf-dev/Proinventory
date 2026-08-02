@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FaTwitter, FaLinkedin, FaFacebook, FaInstagram } from "react-icons/fa";
 import Logo from "../../assets/img/stocktrack-logo.png";
+import useAppSelector from "../../hooks/useAppSelector";
+import useCompanySettings from "../../hooks/useCompanySettings";
 
 const PRODUCT_LINKS = [
   { label: "Features", href: "#features" },
@@ -82,6 +84,9 @@ const FooterCol = ({
 
 const Footer = () => {
   const [email, setEmail] = useState("");
+  const companyId = useAppSelector((s) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
+  const { settings } = useCompanySettings(companyId);
+  const brandName = settings.companyName?.trim() || "ProInventory";
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,13 +108,8 @@ const Footer = () => {
           {/* Brand + socials */}
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <Link to="/" className="flex items-center mb-3">
-              <img src={Logo} alt="StockTrack" className="w-12 h-12 rounded-lg" />
-              <span className="text-white font-bold text-base">
-                Stock
-                <span style={{ color: "var(--color-brand-primary-soft)" }}>
-                  Track
-                </span>
-              </span>
+              <img src={settings.logoUrl || Logo} alt={brandName} className="w-12 h-12 rounded-lg object-cover" />
+              <span className="text-white font-bold text-base">{brandName}</span>
             </Link>
 
             <p

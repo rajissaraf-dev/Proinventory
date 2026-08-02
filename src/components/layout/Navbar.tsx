@@ -2,10 +2,12 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaBars, FaTimes, FaChevronDown } from "react-icons/fa";
 import { useAuth, logOut } from "../../services/firebase";
+import useAppSelector from "../../hooks/useAppSelector";
 import { clearCurrentUser } from "../../features/auth/authSlice";
 import { clearCompany } from "../../features/company/companySlice";
 import { useDispatch } from "react-redux";
 import Logo from "../../assets/img/stocktrack-logo.png";
+import useCompanySettings from "../../hooks/useCompanySettings";
 
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
@@ -28,6 +30,9 @@ const Navbar = () => {
   const navigate   = useNavigate();
   const dispatch   = useDispatch();
   const currentUser = useAuth();
+  const companyId = useAppSelector((s) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
+  const { settings } = useCompanySettings(companyId);
+  const brandName = settings.companyName?.trim() || "ProInventory";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
@@ -57,10 +62,8 @@ const Navbar = () => {
 
           {/* ── Logo ── */}
           <Link to="/" className="flex items-center shrink-0">
-            <img src={Logo} alt="StockTrack" className="w-12 h-12 rounded-lg" />
-            <span className="text-white font-bold text-lg tracking-tight">
-              Pro<span style={{ color: "var(--color-brand-primary-soft)" }}>Inventory</span>
-            </span>
+            <img src={settings.logoUrl || Logo} alt={brandName} className="w-12 h-12 rounded-lg object-cover" />
+            <span className="text-white font-bold text-lg tracking-tight">{brandName}</span>
           </Link>
 
           {/* ── Desktop nav links ── */}

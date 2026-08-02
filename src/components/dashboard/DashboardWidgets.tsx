@@ -20,6 +20,7 @@ import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
 import { Product, InventoryRecord } from "../../types";
 import { StockMovementService } from "../../services/stock-movement.service";
+import useCompanySettings from "../../hooks/useCompanySettings";
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, ArcElement,
@@ -429,14 +430,14 @@ export const CategoryDonutChart = ({ productsOverride }: CategoryDonutChartProps
 
   return (
     <div
-      className="rounded-xl p-5 flex flex-col transition-all hover:shadow-md"
+      className="rounded-xl p-4 sm:p-5 flex flex-col transition-all hover:shadow-md overflow-hidden"
       style={{ 
         background: "var(--color-surface-1)", 
         border: "1px solid var(--color-border-soft)",
         boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
       }}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 px-1">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
             Stock Distribution
@@ -446,9 +447,9 @@ export const CategoryDonutChart = ({ productsOverride }: CategoryDonutChartProps
         <MdInfoOutline size={16} style={{ color: "var(--color-text-faint)" }} className="cursor-help" />
       </div>
 
-      <div className="flex items-center gap-5">
+      <div className="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-5 w-full">
         {/* Donut with improved center text */}
-        <div className="relative shrink-0" style={{ width: 150, height: 150 }}>
+        <div className="relative shrink-0 mx-auto md:mx-0" style={{ width: 150, height: 150 }}>
           <Doughnut data={data} options={options} />
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <p className="text-xl font-extrabold leading-none" style={{ color: "var(--color-text-primary)" }}>
@@ -459,16 +460,16 @@ export const CategoryDonutChart = ({ productsOverride }: CategoryDonutChartProps
         </div>
 
         {/* Enhanced Legend with progress bars */}
-        <ul className="flex-1 space-y-2.5">
+        <ul className="w-full md:flex-1 min-w-0 space-y-2.5 px-1">
           {labels.slice(0, 5).map((label, i) => (
-            <li key={label} className="flex items-center justify-between group">
-              <div className="flex items-center gap-2.5 flex-1">
+            <li key={label} className="flex items-center justify-between gap-3 group w-full">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <span className="w-3 h-3 rounded-full shrink-0 transition-all group-hover:scale-110" style={{ background: COLORS[i % COLORS.length] }} />
-                <span className="text-xs truncate max-w-[100px]" style={{ color: "var(--color-text-secondary)" }}>
+                <span className="text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>
                   {label}
                 </span>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--color-surface-3)" }}>
                   <div 
                     className="h-full rounded-full transition-all duration-500" 
@@ -512,6 +513,8 @@ export const LowStockPanel = ({
   warehouseInventory: propWarehouseInventory 
 }: LowStockPanelProps) => {
   const reduxProducts = useSelector((s: RootState) => s.stock.productData);
+  const companyId = useSelector((s: RootState) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
+  const { settings } = useCompanySettings(companyId);
   const products = productsOverride ?? reduxProducts;
   const warehouseInventory = propWarehouseInventory || {};
 
@@ -528,11 +531,13 @@ export const LowStockPanel = ({
   const outOfStockItems = products
     .filter((p: Product) => getWarehouseStock(p.id) === 0)
     .slice(0, 5);
+
+  const lowStockThreshold = settings.lowStockThreshold || 10;
     
   const lowStockItems = products
     .filter((p: Product) => {
       const stock = getWarehouseStock(p.id);
-      return stock > 0 && stock <= 10;
+      return stock > 0 && stock <= lowStockThreshold;
     })
     .sort((a, b) => getWarehouseStock(a.id) - getWarehouseStock(b.id))
     .slice(0, 5);
@@ -559,8 +564,8 @@ export const LowStockPanel = ({
           </p>
           <p className="text-xs mt-1 max-w-xs mx-auto" style={{ color: "var(--color-text-muted)" }}>
             {warehouseId 
-              ? `All products in this warehouse have more than 10 units in stock.` 
-              : `All products have more than 10 units in stock.`}
+              ? `All products in this warehouse have more than ${lowStockThreshold} units in stock.` 
+              : `All products have more than ${lowStockThreshold} units in stock.`}
           </p>
         </div>
       </div>
@@ -619,7 +624,7 @@ export const LowStockPanel = ({
           const product = item as Product;
           const stock = getWarehouseStock(product.id);
           const isOutOfStock = stock === 0;
-          const isLowStock = stock > 0 && stock <= 10;
+          const isLowStock = stock > 0 && stock <= lowStockThreshold;
           
           return (
             <li 

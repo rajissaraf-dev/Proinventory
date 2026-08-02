@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import { MdBarChart, MdInventory2, MdShield, MdHeadsetMic } from "react-icons/md";
 import Logo from "../../assets/img/stocktrack-logo.png";
 import AuthBottomImg from "../../assets/img/auth-bottom-Photoroom.png";
+import useAppSelector from "../../hooks/useAppSelector";
+import useCompanySettings from "../../hooks/useCompanySettings";
 
 const FEATURES = [
   {
@@ -35,7 +37,12 @@ const FEATURES = [
 ];
 
 
-const AuthLeftPanel = () => (
+const AuthLeftPanel = () => {
+  const companyId = useAppSelector((s) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
+  const { settings } = useCompanySettings(companyId);
+  const brandName = settings.companyName?.trim() || "ProInventory";
+
+  return (
   <div
     className="hidden lg:flex flex-col h-full px-10 pt-8 pb-0 relative overflow-hidden"
     style={{ background: "var(--color-bg-sidebar)" }}
@@ -49,15 +56,15 @@ const AuthLeftPanel = () => (
       />
       {/* Bottom-left deep blue/indigo glow — sits behind the illustration */}
       <div
-        className="absolute -bottom-16 -left-16 w-[340px] h-[340px] rounded-full blur-[90px] opacity-35"
+        className="absolute -bottom-16 -left-16 w-85 h-85 rounded-full blur-[90px] opacity-35"
         style={{ background: "#1a0a4a" }}
       />
       <div
-        className="absolute -bottom-8 left-0 w-[280px] h-[280px] rounded-full blur-[70px] opacity-40"
+        className="absolute -bottom-8 left-0 w-70 h-70 rounded-full blur-[70px] opacity-40"
         style={{ background: "var(--color-brand-primary)" }}
       />
       <div
-        className="absolute bottom-0 left-1/4 w-[200px] h-[200px] rounded-full blur-[80px] opacity-25"
+        className="absolute bottom-0 left-1/4 w-50 h-50 rounded-full blur-[80px] opacity-25"
         style={{ background: "var(--color-brand-cyan)" }}
       />
     </div>
@@ -65,10 +72,8 @@ const AuthLeftPanel = () => (
     {/* Logo */}
     <div className="relative z-10 pb-52">{/* pb-52 keeps content above the bottom illustration */}
       <Link to="/" className="flex items-center mb-4">
-        <img src={Logo} alt="ProInventory" className="w-14 h-w-14 rounded-lg" />
-        <span className="text-white font-bold text-lg">
-          Pro<span style={{ color: "var(--color-brand-primary-soft)" }}>Inventory</span>
-        </span>
+        <img src={settings.logoUrl || Logo} alt={brandName} className="w-14 h-14 rounded-lg object-cover" />
+        <span className="text-white font-bold text-lg">{brandName}</span>
       </Link>
 
       
@@ -116,6 +121,7 @@ const AuthLeftPanel = () => (
       />
     </div>
   </div>
-);
+  );
+};
 
 export default AuthLeftPanel;

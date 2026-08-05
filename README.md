@@ -202,6 +202,21 @@ VITE_CLOUDINARY_UPLOAD_PRESET=your_unsigned_upload_preset
 
 > ⚠️ Never commit your `.env` file. It is already listed in `.gitignore`.
 
+### 3.1 — Optional owner seed
+
+If you want to create a single owner account in Firebase and a matching company record,
+set the following additional values in `.env` and run `npm run seed:owner` once.
+
+```env
+VITE_OWNER_EMAIL=owner@example.com
+VITE_OWNER_PASSWORD=your_owner_password_here
+VITE_OWNER_NAME=Owner Name
+VITE_OWNER_COMPANY_NAME=Owner Company
+FIREBASE_SERVICE_ACCOUNT_PATH=path/to/service-account.json
+```
+
+This is idempotent: if the owner account already exists, the script reuses the same account and updates Firestore.
+
 ### 4 — Start the development server
 
 ```bash

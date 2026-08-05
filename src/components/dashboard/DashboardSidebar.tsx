@@ -4,7 +4,7 @@ import {
   MdDashboard, MdInventory, MdShoppingCart, MdReceipt,
   MdPeople, MdWarehouse, MdSwapHoriz, MdBarChart,
   MdDescription, MdExtension, MdNotifications,
-  MdMessage, MdSettings, MdLogout, MdChevronLeft,
+  MdMessage, MdSettings, MdLock, MdLogout, MdChevronLeft,
   MdMenu,
   MdChevronRight,
 } from "react-icons/md";
@@ -15,6 +15,7 @@ import { useDispatch } from "react-redux";
 import Logo from "../../assets/img/stocktrack-logo.png";
 import { NotificationService } from "../../services/notification.service";
 import useAppSelector from "../../hooks/useAppSelector";
+import useRole from "../../hooks/useRole";
 import useCompanySettings from "../../hooks/useCompanySettings";
 
 interface NavItem {
@@ -23,6 +24,7 @@ interface NavItem {
   to?: string;
   badge?: number;
   onClick?: () => void;
+  disabled?: boolean;
 }
 
 interface DashboardSidebarProps {
@@ -49,6 +51,7 @@ const DashboardSidebar = ({
   const [localNotificationCount, setLocalNotificationCount] = useState(notificationCount);
   const companyId = useAppSelector(s => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
   const { settings } = useCompanySettings(companyId);
+  const { isOwner } = useRole();
   const brandName = settings.companyName?.trim() || "ProInventory";
 
   // Load notification count periodically with better error handling
@@ -118,15 +121,21 @@ const bottomNav: NavItem[] = [
     badge: displayCount
   },
   { 
-    label: "Messages", 
+    label: "Warehouse", 
     icon: <MdMessage size={18} />, 
-    onClick: () => navigate("/messages"), 
+    onClick: () => navigate("/warehouse"), 
     badge: messageCount 
   },
 { 
   label: "Settings", 
-  icon: <MdSettings size={18} />, 
-  onClick: () => navigate("/dashboard?tab=settings") 
+  icon: isOwner ? <MdSettings size={18} /> : (
+    <span className="inline-flex items-center gap-1">
+      <MdSettings size={18} />
+      <MdLock size={12} />
+    </span>
+  ), 
+  onClick: isOwner ? () => navigate("/dashboard?tab=settings") : undefined,
+  disabled: !isOwner,
 },
   { label: "Log Out", icon: <MdLogout size={18} />, onClick: handleLogout },
 ];
@@ -181,11 +190,16 @@ const bottomNav: NavItem[] = [
           </Link>
         ) : (
           <button
-            onClick={item.onClick}
+            onClick={item.disabled ? undefined : item.onClick}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group relative"
-            style={{ color: "var(--color-nav-item)" }}
+            style={{
+              color: item.disabled ? "var(--color-text-faint)" : "var(--color-nav-item)",
+              cursor: item.disabled ? "not-allowed" : "pointer",
+              opacity: item.disabled ? 0.6 : 1,
+            }}
+            disabled={item.disabled}
           >
-            <span style={{ color: "var(--color-nav-icon)" }}>{item.icon}</span>
+            <span style={{ color: item.disabled ? "var(--color-text-faint)" : "var(--color-nav-icon)" }}>{item.icon}</span>
             {!collapsed && <span>{item.label}</span>}
             {collapsed && (
               <span

@@ -35,6 +35,7 @@ const INPUT_STYLE = {
   color: "var(--color-input-text)",
 };
 
+
 /* ─── Page ───────────────────────────────────────────────── */
 const LoginPage = () => {
   const navigate  = useNavigate();
@@ -81,8 +82,13 @@ const LoginPage = () => {
     setLoading(true); setServerErr("");
     try {
       await login(data.email ?? "", data.password ?? "");
-    } catch {
-      setServerErr("Incorrect email or password. Please try again.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("No user profile found") || message.includes("profile")) {
+        setServerErr("We couldn't load your profile. Please try again or contact support.");
+      } else {
+        setServerErr("Incorrect email or password. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -250,6 +256,7 @@ const LoginPage = () => {
               >
                 {loading ? "Signing in…" : "Log In"}
               </button>
+
             </form>
 
           </div>

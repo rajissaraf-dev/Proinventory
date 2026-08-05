@@ -1,0 +1,302 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDocPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function userExists() {
+      return signedIn() && exists(userDocPath());
+    }
+
+    function userData() {
+      return get(userDocPath()).data;
+    }
+
+    function isActiveUser() {
+      return signedIn()
+        && userExists()
+        && (userData().status == "active" || userData().status == "trial");
+    }
+
+    function userCompanyId() {
+      return userExists() ? userData().companyId : null;
+    }
+
+    function userRole() {
+      return userExists() ? userData().role : null;
+    }
+
+    function belongsToCompany(companyId) {
+      return signedIn()
+        && userExists()
+        && isActiveUser()
+        && userCompanyId() == companyId;
+    }
+
+    function isOwner() {
+      return userExists()
+        && isActiveUser()
+        && userRole() == "company_owner";
+    }
+
+    function isCompanyAdmin() {
+      return userExists()
+        && isActiveUser()
+        && userRole() == "company_admin";
+    }
+
+    function isStaff() {
+      return userExists()
+        && isActiveUser()
+        && userRole() == "staff";
+    }
+
+    function isOwnerOrAdmin() {
+      return isOwner() || isCompanyAdmin();
+    }
+
+    function hasPermission(module, action) {
+      return userExists()
+        && (isOwner()
+          ? true
+          : (isOwnerOrAdmin()
+            || (userData().permissions != null
+              && userData().permissions[module] != null
+              && userData().permissions[module][action] == true)));
+    }
+
+    function hasModuleRead(module) {
+      return hasPermission(module, "read");
+    }
+
+    function hasModuleWrite(module) {
+      return hasPermission(module, "write");
+    }
+
+    function hasModuleDelete(module) {
+      return userExists()
+        && (isOwner()
+          || (userData().permissions != null
+            && userData().permissions[module] != null
+            && userData().permissions[module]["delete"] == true));
+    }
+
+    function hasStockAdjust() {
+      return userExists()
+        && (isOwnerOrAdmin()
+          || (userData().permissions != null
+            && userData().permissions["stock"] != null
+            && userData().permissions["stock"]["adjust"] == true));
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role in ["company_owner", "company_admin", "staff"]
+        && (
+          request.resource.data.companyId == ""
+          || (
+            request.resource.data.companyId != ""
+            && exists(/databases/$(database)/documents/companies/$(request.resource.data.companyId))
+            && get(/databases/$(database)/documents/companies/$(request.resource.data.companyId)).data.ownerId == request.auth.uid
+          )
+        );
+
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.companyId == resource.data.companyId
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.email == resource.data.email;
+
+      allow update: if isOwnerOrAdmin() && userCompanyId() == resource.data.companyId;
+
+      allow delete: if false;
+    }
+
+    match /companies/{companyId} {
+      allow read: if belongsToCompany(companyId);
+
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+
+      allow update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+
+      allow delete: if false;
+    }
+
+    match /companies/{companyId}/users/{uid} {
+      allow read: if belongsToCompany(companyId) && (isOwnerOrAdmin() || request.auth.uid == uid);
+
+      allow create: if belongsToCompany(companyId)
+        && isOwnerOrAdmin()
+        && request.resource.data.uid == uid
+        && request.resource.data.companyId == companyId
+        && request.resource.data.role in ["company_admin", "staff"];
+
+      allow update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/products/{productId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("products");
+      allow create: if belongsToCompany(companyId) && hasModuleWrite("products");
+      allow update: if belongsToCompany(companyId) && (isOwnerOrAdmin() || isStaff());
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/categories/{categoryId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("categories");
+      allow create, update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/inventory/{inventoryId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("stock");
+      allow create, update: if belongsToCompany(companyId) && (hasModuleWrite("stock") || isStaff());
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/counters/{counterId} {
+      allow read: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow create, update, delete: if belongsToCompany(companyId) && isOwnerOrAdmin();
+    }
+
+    match /companies/{companyId}/suppliers/{supplierId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("suppliers");
+      allow create, update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/customers/{customerId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("customers");
+      allow create: if belongsToCompany(companyId) && hasModuleWrite("customers");
+      allow update: if belongsToCompany(companyId) && hasModuleWrite("customers");
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/orders/{orderId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("orders");
+      allow create: if belongsToCompany(companyId) && hasModuleWrite("orders");
+      allow update: if belongsToCompany(companyId) && hasModuleWrite("orders");
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/purchaseOrders/{poId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("purchaseOrders");
+      allow create, update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/transfers/{transferId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("stock");
+      allow create, update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/transfers/{transferId}/items/{itemId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("stock");
+      allow create, update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow delete: if false;
+    }
+
+    match /companies/{companyId}/stockMovements/{movementId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("stock");
+      allow create: if belongsToCompany(companyId) && (hasStockAdjust() || isStaff());
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /companies/{companyId}/notifications/{notificationId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("notifications");
+      allow create: if belongsToCompany(companyId) && hasModuleWrite("notifications");
+      allow update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/sales/{saleId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("sales");
+      allow create: if belongsToCompany(companyId) && (hasModuleWrite("sales") || isStaff());
+      allow update: if belongsToCompany(companyId) && (isOwnerOrAdmin() || isStaff());
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/warehouses/{warehouseId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("stock");
+      allow create, update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow delete: if belongsToCompany(companyId) && isOwner();
+
+      match /inventory/{inventoryId} {
+        allow read: if belongsToCompany(companyId) && hasModuleRead("stock");
+        allow create, update: if belongsToCompany(companyId) && (hasModuleWrite("stock") || isStaff());
+        allow delete: if belongsToCompany(companyId) && isOwner();
+      }
+    }
+
+    match /companies/{companyId}/reports/{reportId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("reports");
+      allow create, update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow delete: if false;
+    }
+
+    match /companies/{companyId}/settings/{settingId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("settings");
+      allow create, update: if belongsToCompany(companyId) && isOwnerOrAdmin();
+      allow delete: if false;
+    }
+
+    match /companies/{companyId}/auditLogs/{logId} {
+      allow read: if belongsToCompany(companyId) && hasModuleRead("reports");
+      allow create: if belongsToCompany(companyId);
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /companies/{companyId}/messages/{messageId} {
+      allow read: if belongsToCompany(companyId)
+            && (isOwnerOrAdmin()
+                || isStaff()
+                || request.auth.uid == resource.data.senderId
+                || request.auth.uid == resource.data.recipientId);
+
+      allow create: if belongsToCompany(companyId)
+            && (isOwnerOrAdmin() || isStaff())
+            && request.resource.data.senderId == request.auth.uid
+            && request.resource.data.companyId == companyId;
+
+      allow update: if belongsToCompany(companyId)
+            && (request.auth.uid == resource.data.recipientId
+                || isOwnerOrAdmin())
+            && request.resource.data.keys().hasOnly(["read", "readAt"]);
+
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+
+    match /companies/{companyId}/conversations/{conversationId} {
+      allow read: if belongsToCompany(companyId)
+            && (isOwnerOrAdmin() || isStaff())
+            && resource.data.participants.hasAny([request.auth.uid]);
+
+      allow create: if belongsToCompany(companyId)
+            && (isOwnerOrAdmin() || isStaff())
+            && request.resource.data.participants.hasAny([request.auth.uid])
+            && request.resource.data.companyId == companyId;
+
+      allow update: if belongsToCompany(companyId)
+            && (isOwnerOrAdmin() || isStaff())
+            && resource.data.participants.hasAny([request.auth.uid]);
+
+      allow delete: if belongsToCompany(companyId) && isOwner();
+    }
+  }
+}

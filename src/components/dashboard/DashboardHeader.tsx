@@ -275,9 +275,8 @@ const DashboardHeader = ({
                   {authUser?.email}
                 </p>
                 <span
-                  className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium capitalize"
+                  className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium capitalize bg-white"
                   style={{
-                    background: "var(--color-brand-primary-soft)",
                     color: "var(--color-brand-primary)",
                   }}
                 >

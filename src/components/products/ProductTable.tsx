@@ -41,6 +41,7 @@ const ProductTable = ({
   const companyId = useAppSelector((s) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
   const { settings } = useCompanySettings(companyId);
   const canEdit = isOwner || isAdmin;
+  console.log(settings)
 
   if (isLoading) {
     return (

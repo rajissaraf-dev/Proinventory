@@ -1,6 +1,9 @@
 // src/components/dashboard/SaleModal.tsx
 
 import { useState, useEffect } from "react";
+import useAppSelector from "../../hooks/useAppSelector";
+import useCompanySettings from "../../hooks/useCompanySettings";
+import { formatCurrency } from "../../lib/companySettings";
 import { 
   MdClose, MdShoppingCart, MdWarehouse, 
   MdAdd, MdDelete, MdRemove, MdAddCircle, MdReceipt,
@@ -100,6 +103,13 @@ export const SaleModal = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isMultiProduct, setIsMultiProduct] = useState(false);
+
+  const currentUser = useAppSelector((s) => s.auth.user);
+  const currentUserId = currentUser?.uid ?? "";
+  const { settings } = useCompanySettings(companyId);
+  const currencySymbol = settings.currencySymbol || "$";
+  const currencyCode = settings.currency || "USD";
+  const formatMoney = (value: number) => formatCurrency(value, currencySymbol, currencyCode);
 
   // ─── Get available products for the warehouse ───
   const getAvailableProducts = (): Product[] => {
@@ -305,7 +315,7 @@ useEffect(() => {
           paymentMethod: payment.method,
           discount: payment.discount || 0,
           tax: payment.tax || 0,
-          createdBy: "system",
+          createdBy: currentUserId || "system",
         });
 
         SalesService.notifyInventoryChange({
@@ -372,10 +382,10 @@ useEffect(() => {
         </div>
         <div className="text-right min-w-[70px]">
           <p className="text-xs font-semibold" style={{ color: "var(--color-brand-primary-soft)" }}>
-            ${itemTotal.toFixed(2)}
+            {formatMoney(itemTotal)}
           </p>
           <p className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
-            @ ${item.price.toFixed(2)}
+            @ {formatMoney(item.price)}
           </p>
         </div>
         <button
@@ -500,7 +510,7 @@ useEffect(() => {
                   Cart ({cartItems.length} items)
                 </p>
                 <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
-                  Total: ${subtotal.toFixed(2)}
+                  Total: {formatMoney(subtotal)}
                 </span>
               </div>
               <div className="space-y-2 max-h-[200px] overflow-y-auto">
@@ -618,24 +628,24 @@ useEffect(() => {
             style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}>
             <div className="flex justify-between text-xs">
               <span style={{ color: "var(--color-text-muted)" }}>Subtotal</span>
-              <span style={{ color: "var(--color-text-primary)" }}>${subtotal.toFixed(2)}</span>
+              <span style={{ color: "var(--color-text-primary)" }}>{formatMoney(subtotal)}</span>
             </div>
             {payment.discount > 0 && (
               <div className="flex justify-between text-xs">
                 <span style={{ color: "var(--color-text-muted)" }}>Discount ({payment.discount}%)</span>
-                <span style={{ color: "var(--color-danger)" }}>-${discountAmount.toFixed(2)}</span>
+                <span style={{ color: "var(--color-danger)" }}>-{formatMoney(discountAmount)}</span>
               </div>
             )}
             {payment.tax > 0 && (
               <div className="flex justify-between text-xs">
                 <span style={{ color: "var(--color-text-muted)" }}>Tax ({payment.tax}%)</span>
-                <span style={{ color: "var(--color-text-primary)" }}>+${taxAmount.toFixed(2)}</span>
+                <span style={{ color: "var(--color-text-primary)" }}>+{formatMoney(taxAmount)}</span>
               </div>
             )}
             <div className="flex justify-between text-sm font-semibold pt-1 border-t"
               style={{ borderColor: "var(--color-border-subtle)" }}>
               <span style={{ color: "var(--color-text-primary)" }}>Total</span>
-              <span style={{ color: "var(--color-brand-primary-soft)" }}>${total.toFixed(2)}</span>
+              <span style={{ color: "var(--color-brand-primary-soft)" }}>{formatMoney(total)}</span>
             </div>
             <div className="flex justify-between text-[10px]" style={{ color: "var(--color-text-faint)" }}>
               <span>{cartItems.length} item{cartItems.length !== 1 ? "s" : ""} in cart</span>

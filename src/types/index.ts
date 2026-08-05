@@ -418,14 +418,27 @@ export interface RolesSettings {
 
 // ─── Legacy aliases ───────────────────────────────────────────────────────────
 
-export type BusinessProfile = Company & {
-  businessName:    string;
+// export type BusinessProfile = Company & {
+//   businessName:    string;
+//   businessAddress: string;
+//   about?:          string;
+//   mission?:        string;
+//   logo?:           string;
+//   user_id?:        string;
+// };
+export interface BusinessProfile {
+  id?: string;
+  name: string;
+  businessName: string;
   businessAddress: string;
-  about?:          string;
-  mission?:        string;
-  logo?:           string;
-  user_id?:        string;
-};
+  logo: string;
+  email?: string;
+  phone?: string;
+  about?: string;
+  mission?: string;
+  user_id?: string;
+}
+
 
 // ── REMOVED: isSuperAdmin ──
 export interface CurrentUser {

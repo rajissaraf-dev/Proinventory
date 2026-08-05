@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import { doc, getDoc, updateDoc, collection, getDocs, DocumentData } from "firebase/firestore";
-import db from "../../services/firebase";
+import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, DocumentData } from "firebase/firestore";
+import db, { auth } from "../../services/firebase";
 import { CurrentUser, CurrentUserState, UserProfile, DEFAULT_PERMISSIONS } from "../../types";
 import { sanitizeCurrentUser, sanitizeUserProfile } from "../../services/sanitize.service";
 
@@ -100,18 +100,139 @@ const serializeProfile = (data: FirestoreUserData): UserProfile => {
 
 // ─── Async Thunks ────────────────────────────────────────────────────────────
 
+const generateCompanyId = (name: string, uid: string): string => {
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .slice(0, 24);
+  return `cmp_${slug}_${uid.slice(0, 6)}`;
+};
+
+const findCompanyIdByOwnerId = async (uid: string): Promise<string | null> => {
+  const q = query(collection(db, "companies"), where("ownerId", "==", uid));
+  const snap = await getDocs(q);
+  return snap.docs[0]?.id ?? null;
+};
+
+const createCompanyForOwner = async (uid: string, email: string, displayName: string): Promise<string> => {
+  const companyId = generateCompanyId(displayName || email, uid);
+  const companyDoc = {
+    name: displayName || email,
+    slug: companyId,
+    email,
+    phone: "",
+    industry: "",
+    plan: "starter",
+    status: "active",
+    subscriptionStatus: "active",
+    ownerId: uid,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const warehouseDoc = {
+    name: "Main Warehouse",
+    code: "WH-001",
+    address: "",
+    city: "",
+    country: "",
+    isDefault: true,
+    companyId,
+    createdBy: uid,
+    status: "active",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const companyUserDoc = {
+    uid,
+    email,
+    displayName,
+    companyId,
+    role: "company_owner",
+    status: "active",
+    permissions: DEFAULT_PERMISSIONS.company_owner,
+    assignedWarehouseId: "main_warehouse",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  await setDoc(doc(db, "companies", companyId), companyDoc);
+  await setDoc(doc(db, "companies", companyId, "warehouses", "main_warehouse"), warehouseDoc);
+  await setDoc(doc(db, "companies", companyId, "users", uid), companyUserDoc);
+  return companyId;
+};
+
+const createMissingProfile = async (uid: string): Promise<UserProfile> => {
+  const currentUser = auth.currentUser;
+  const email = currentUser?.email ?? "";
+  const displayName = currentUser?.displayName ?? (email ? email.split("@")[0] : "User");
+
+  const fallbackProfile = {
+    uid,
+    email,
+    displayName,
+    companyId: "",
+    role: "company_owner" as const,
+    status: "active" as const,
+    permissions: DEFAULT_PERMISSIONS.company_owner,
+    assignedWarehouseId: "",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  let inferredCompanyId = await findCompanyIdByOwnerId(uid);
+  if (inferredCompanyId) {
+    fallbackProfile.companyId = inferredCompanyId;
+    console.log("🔧 [authSlice] Derived companyId from owner record:", inferredCompanyId);
+  } else {
+    try {
+      inferredCompanyId = await createCompanyForOwner(uid, email, displayName);
+      fallbackProfile.companyId = inferredCompanyId;
+      console.log("🏢 [authSlice] Created company for owner:", inferredCompanyId);
+    } catch (bootstrapErr) {
+      console.warn("⚠️ [authSlice] Could not bootstrap company on first login:", bootstrapErr);
+    }
+  }
+
+  try {
+    await setDoc(doc(db, "users", uid), fallbackProfile, { merge: true });
+    return serializeProfile(fallbackProfile as FirestoreUserData);
+  } catch (writeErr) {
+    console.warn("⚠️ [authSlice] Profile write blocked by Firestore rules, using in-memory fallback:", writeErr);
+    return serializeProfile(fallbackProfile as FirestoreUserData);
+  }
+};
+
 /**
  * Fetch users/{uid} profile.
  * - Serializes Firestore Timestamps so Redux stays serializable.
  * - Auto-repairs status:"inactive" to "active".
+ * - Auto-creates a minimal profile when the document is missing.
  */
 export const fetchUserProfile = createAsyncThunk<UserProfile, string>(
   "auth/fetchUserProfile",
   async (uid) => {
     const snap = await getDoc(doc(db, "users", uid));
     if (!snap.exists()) {
-      console.error("❌ [authSlice] No users/{uid} doc");
-      throw new Error(`No user profile found for uid: ${uid}.`);
+      console.warn("⚠️ [authSlice] No users/{uid} doc — creating a fallback profile for uid:", uid);
+      try {
+        return await createMissingProfile(uid);
+      } catch (createErr) {
+        console.error("❌ [authSlice] Could not create fallback profile:", createErr);
+        return serializeProfile({
+          uid,
+          email: auth.currentUser?.email ?? "",
+          displayName: auth.currentUser?.displayName ?? "User",
+          companyId: "",
+          role: "company_owner",
+          status: "active",
+          permissions: DEFAULT_PERMISSIONS.company_owner,
+          assignedWarehouseId: "",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as FirestoreUserData);
+      }
     }
 
     const data = snap.data() as FirestoreUserData;

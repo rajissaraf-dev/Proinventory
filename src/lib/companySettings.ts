@@ -10,12 +10,31 @@ export const formatCurrency = (
   currencyCode = "USD"
 ) => {
   const normalizedAmount = Number.isFinite(amount) ? amount : 0;
-  const symbol = currencySymbol || "$";
-  const code = currencyCode || "USD";
+  const code = (currencyCode || "USD").toUpperCase();
+  const symbolOverride = currencySymbol?.trim();
 
-  if (code === "NGN" || code === "USD" || code === "EUR" || code === "GBP") {
-    return `${symbol}${normalizedAmount.toFixed(2)}`;
-  }
+  const symbolMap: Record<string, string> = {
+    NGN: "₦",
+    USD: "$",
+    EUR: "€",
+    GBP: "£",
+    GHS: "₵",
+    KES: "KSh",
+    ZAR: "R",
+    JPY: "¥",
+    CNY: "¥",
+    INR: "₹",
+    AUD: "A$",
+    CAD: "C$",
+  };
 
-  return `${symbol}${normalizedAmount.toFixed(2)} ${code}`;
+  const symbol = symbolMap[symbolOverride?.toUpperCase() ?? ""] || symbolOverride || symbolMap[code] || "$";
+  const absoluteAmount = Math.abs(normalizedAmount);
+  const formattedNumber = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(absoluteAmount);
+  const sign = normalizedAmount < 0 ? "-" : "";
+
+  return `${sign}${symbol}${formattedNumber}`;
 };

@@ -21,6 +21,7 @@ import { RootState } from "../../app/store";
 import { Product, InventoryRecord } from "../../types";
 import { StockMovementService } from "../../services/stock-movement.service";
 import useCompanySettings from "../../hooks/useCompanySettings";
+import { formatCurrency } from "../../lib/companySettings";
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, ArcElement,
@@ -883,6 +884,10 @@ export const ProductsTable = ({
   productsOverride 
 }: ProductsTableProps) => {
   const reduxProducts = useSelector((s: RootState) => s.stock.productData);
+  const companyId = useSelector((s: RootState) => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
+  const { settings } = useCompanySettings(companyId);
+  const currencySymbol = settings.currencySymbol || "$";
+  const currencyCode = settings.currency || "USD";
   const products = productsOverride ?? reduxProducts;
 
   if (products.length === 0) {
@@ -967,9 +972,8 @@ export const ProductsTable = ({
           {onMultiSell && !readOnly && (
             <button
               onClick={onMultiSell}
-              className="h-9 px-3.5 rounded-lg text-xs flex items-center gap-1.5 transition-all hover:opacity-80"
+              className="h-9 px-3.5 rounded-lg text-xs flex items-center gap-1.5 transition-all hover:opacity-80 bg-white"
               style={{
-                background: "var(--color-brand-primary-soft)",
                 color: "var(--color-brand-primary)",
                 border: "1px solid var(--color-border-brand)",
               }}
@@ -979,7 +983,7 @@ export const ProductsTable = ({
           )}
           
           <div
-            className="flex items-center gap-2 h-9 px-3.5 rounded-lg text-xs transition-all focus-within:ring-2 focus-within:ring-brand-primary/20"
+            className="flex items-center gap-2 h-9 px-3.5 rounded-lg text-xs transition-all focus-within:ring-2 focus-within:ring-brand-primary/20 "
             style={{
               background: "var(--color-input-bg)",
               border: "1px solid var(--color-input-border)",
@@ -1011,8 +1015,8 @@ export const ProductsTable = ({
       </div>
 
       {/* Table with enhanced styling */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+      <div className="overflow-x-hidden min-w-0">
+        <table className="w-full text-xs table-fixed">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
               {["", "SKU", "Product Name", "Category", "Price", "Stock", "Status", "Actions"].map((h) => (
@@ -1075,7 +1079,7 @@ export const ProductsTable = ({
                     {product.categoryName || "Uncategorized"}
                   </td>
                   <td className="px-4 py-3 font-semibold" style={{ color: "var(--color-text-primary)" }}>
-                    ${Number(product.product_Price).toFixed(2)}
+                    {formatCurrency(Number(product.product_Price ?? product.price ?? 0), currencySymbol, currencyCode)}
                   </td>
                   <td className="px-4 py-3 font-semibold" style={{ color: "var(--color-text-primary)" }}>
                     {product.product_Qty}

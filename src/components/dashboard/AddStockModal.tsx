@@ -48,6 +48,10 @@ const AddStockModal = ({ onClose }: AddStockModalProps) => {
 
     let cancelled = false;
     const loadWarehouses = async () => {
+      if (!companyId) {
+        console.warn("⚠️ [AddStockModal] No companyId available for loadWarehouses, skipping warehouse load.");
+        return;
+      }
       setWarehousesLoading(true);
       try {
         const list = await WarehouseService.list(companyId);

@@ -37,3 +37,11 @@ declare module "*.json" {
   const value: unknown;
   export default value;
 }
+
+declare global {
+  interface ImportMetaEnv {}
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
+}

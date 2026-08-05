@@ -14,6 +14,7 @@ import {
 import { FiTrash2 } from "react-icons/fi";
 
 import useAppSelector    from "../hooks/useAppSelector";
+import useCompanySettings from "../hooks/useCompanySettings";
 import useRole           from "../hooks/useRole";
 // import useCompanyAccess  from "../hooks/useCompanyAccess";
 
@@ -24,6 +25,7 @@ import { InventoryService }     from "../services/inventory.service";
 import { TransferService }      from "../services/transfer.service";
 import { StockMovementService } from "../services/stock-movement.service";
 import { NotificationService }  from "../services/notification.service";
+import { formatCurrency } from "../lib/companySettings";
 
 import {
   CompanyUser, UserRole,
@@ -216,15 +218,16 @@ const AddStaffModal = ({
 /* ─── Main Page ────────────────────────────────────────────── */
 const OwnerDashboardPage = () => {
   const companyId          = useAppSelector(s=>s.auth.profile?.companyId ?? s.auth.user?.companyId)??"";
+  const { settings }       = useCompanySettings(companyId);
   const company            = useAppSelector(s=>s.company.company);
-  const [, setSearchParams] = useSearchParams()
+  const [, setSearchParams] = useSearchParams();
   const products           = useAppSelector(s=>s.stock.productData);
   const location           = useLocation();
-  const { profile, isOwner, canDeleteProduct, hasWarehouseScope, assignedWarehouseId } = useRole();
+  const { profile, isOwner, isAdmin, canDeleteProduct, hasWarehouseScope, assignedWarehouseId } = useRole();
   // ─── REMOVED: isTrial, daysLeft, isGuest from useCompanyAccess ───
   // const { hasAccess } = useCompanyAccess();
 
-// Around line 138
+// ─── Warehouse visibility helper ───
 const canViewWarehouse = (
   warehouseId: string, 
   role?: string, 
@@ -236,21 +239,27 @@ const canViewWarehouse = (
     return true;
   }
   
-  // If user has an assigned warehouse, restrict to that warehouse
-  if (assignedId) {
-    return warehouseId === assignedId;
-  }
-  
-  // Admins without assigned warehouse can see all
+  // Admin can see all warehouses (they manage inventory)
   if (role === 'company_admin') {
     return true;
   }
   
-  // Staff fallback
+  // Staff with assigned warehouse - ONLY see their assigned warehouse
+  if (role === 'staff' && assignedId) {
+    return warehouseId === assignedId;
+  }
+  
+  // Staff without assigned warehouse - can see the default warehouse
+  if (role === 'staff' && !assignedId) {
+    return isDefault || warehouseId === 'main_warehouse';
+  }
+  
+  // Fallback: only show default
   return isDefault || warehouseId === 'main_warehouse';
 };
 
-  const [oTab,    setOTab]    = useState<OTab>("dashboard");
+
+const [oTab,    setOTab]    = useState<OTab>("dashboard");
   // Add this helper function:
 const setActiveTab = (tab: OTab) => {
   setOTab(tab);
@@ -266,7 +275,7 @@ const setActiveTab = (tab: OTab) => {
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseInventory, setWarehouseInventory] = useState<Record<string, InventoryRecord[]>>({});
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(assignedWarehouseId || "");
   const [whLoading, setWhLoading] = useState(false);
   const [showAddWh, setShowAddWh] = useState(false);
   const [whForm, setWhForm] = useState<WarehouseForm>({
@@ -373,13 +382,21 @@ useEffect(() => {
       "categories", 
       "transfers", 
       "movements", 
-      "notifications", 
-      "settings" // ← ADD THIS
+      "notifications",
     ];
+
+    if (isOwner) {
+      allowedTabs.push("settings");
+    }
+
     if (tabParam && allowedTabs.includes(tabParam as OTab)) {
       setOTab(tabParam as OTab);
+    } else if (tabParam === "settings" && !isOwner) {
+      // Prevent non-owners from accessing settings via URL manipulation
+      setSearchParams({ tab: "dashboard" });
+      setOTab("dashboard");
     }
-  }, [location.search]);
+  }, [location.search, isOwner, setSearchParams]);
 
   // Handler to close the settings modal and revert to main dashboard tab
   const handleCloseSettings = () => {
@@ -390,10 +407,12 @@ useEffect(() => {
 
   const sideW = sideCol?64:220;
 
-  const defaultPreviewWarehouseId = warehouses.find((warehouse) => warehouse.isDefault)?.id
-    ?? warehouses.find((warehouse) => warehouse.id === "main_warehouse")?.id
-    ?? warehouses[0]?.id
-    ?? "";
+  const defaultPreviewWarehouseId = hasWarehouseScope && assignedWarehouseId
+    ? assignedWarehouseId
+    : warehouses.find((warehouse) => warehouse.isDefault)?.id
+      ?? warehouses.find((warehouse) => warehouse.id === "main_warehouse")?.id
+      ?? warehouses[0]?.id
+      ?? "";
 
   const previewWarehouseId = hasWarehouseScope && assignedWarehouseId
     ? assignedWarehouseId
@@ -440,7 +459,8 @@ const editItemWarehouseStock = editItem ?
   : 0;
 
 const currentWarehouse = warehouses.find(w => w.id === previewWarehouseId);
-const currentWarehouseName = currentWarehouse?.name || previewWarehouseId;
+const currentWarehouseName = currentWarehouse?.name
+  ?? ((whLoading || warehouses.length === 0) ? "Loading warehouse..." : previewWarehouseId || "Main Warehouse");
 
   // Load notifications with less frequency
 const loadNotifications = useCallback(async (cid = companyId) => {
@@ -481,7 +501,10 @@ const loadNotifications = useCallback(async (cid = companyId) => {
   }, [company?.ownerId, companyId, profile?.uid]);
 
 const loadWarehouses = useCallback(async (cid = companyId) => {
-  if (!cid) return;
+  if (!cid) {
+    console.warn("⚠️ [OwnerDashboardPage] No companyId available for loadWarehouses, skipping warehouse load.");
+    return;
+  }
   setWhLoading(true);
   try {
     const list = await WarehouseService.list(cid);
@@ -489,13 +512,21 @@ const loadWarehouses = useCallback(async (cid = companyId) => {
     console.log('📦 [loadWarehouses] All warehouses:', list.map(w => ({ id: w.id, name: w.name, isDefault: w.isDefault })));
     console.log('👤 [loadWarehouses] User role:', profile?.role, 'assignedWarehouseId:', assignedWarehouseId);
 
+    // Filter warehouses based on user role
     const scopedList = list.filter((wh) =>
       canViewWarehouse(wh.id, profile?.role, assignedWarehouseId, wh.isDefault)
     );
     
     console.log('🔍 [loadWarehouses] Scoped warehouses:', scopedList.map(w => ({ id: w.id, name: w.name })));
     
-    const sorted = scopedList.sort((a, b) => a.name.localeCompare(b.name));
+    // Sort: default first, then alphabetically
+    const sorted = scopedList.sort((a, b) => {
+      if (a.isDefault && !b.isDefault) return -1;
+      if (!a.isDefault && b.isDefault) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Load inventory for each warehouse
     const inventoryMap: Record<string, InventoryRecord[]> = {};
     const inventoryLists = await Promise.all(
       sorted.map((warehouse) => InventoryService.listByWarehouse(cid, warehouse.id))
@@ -511,20 +542,33 @@ const loadWarehouses = useCallback(async (cid = companyId) => {
     setWarehouses(sorted);
     setWarehouseInventory(inventoryMap);
     
-    // ✅ CRITICAL: For users with assigned warehouse, force use it
-    if (assignedWarehouseId && sorted.some(w => w.id === assignedWarehouseId)) {
-      setSelectedWarehouseId(assignedWarehouseId);
-    } else if (previewWarehouseId && sorted.some(w => w.id === previewWarehouseId)) {
-      setSelectedWarehouseId(previewWarehouseId);
-    } else if (sorted.length > 0) {
-      setSelectedWarehouseId(sorted[0].id);
+    // ─── CRITICAL: Set selected warehouse ───
+    if (sorted.length > 0) {
+      // For staff with assigned warehouse, force use it
+      if (assignedWarehouseId && sorted.some(w => w.id === assignedWarehouseId)) {
+        setSelectedWarehouseId(assignedWarehouseId);
+      } 
+      // For staff without assigned warehouse, use default
+      else if (profile?.role === 'staff' && !assignedWarehouseId) {
+        const defaultWh = sorted.find(w => w.isDefault || w.id === 'main_warehouse');
+        if (defaultWh) {
+          setSelectedWarehouseId(defaultWh.id);
+        } else {
+          setSelectedWarehouseId(sorted[0].id);
+        }
+      }
+      // For owners/admins, use the first warehouse (usually default)
+      else {
+        const defaultWh = sorted.find(w => w.isDefault || w.id === 'main_warehouse');
+        setSelectedWarehouseId(defaultWh?.id || sorted[0].id);
+      }
     }
   } catch (error) {
     console.error("Failed to load warehouses:", error);
   } finally {
     setWhLoading(false);
   }
-}, [assignedWarehouseId, companyId, profile?.role, previewWarehouseId]);
+}, [assignedWarehouseId, companyId, profile?.role]);
 
 useEffect(() => {
   // Force reload warehouses when sub-warehouse staff logs in
@@ -1082,7 +1126,7 @@ const getTimeAgo = (date: Date): string => {
   }
 };
 
-  const canCreateTransfer = isOwner || hasWarehouseScope;
+  const canCreateTransfer = isOwner || isAdmin;
 
   // ─── UPDATED TABS: Removed "plan" ───
 const TABS: { id: OTab; icon: React.ReactNode; label: string }[] = [
@@ -1134,8 +1178,10 @@ const totalInventoryValue = useMemo(() => {
 const assignedWarehouseName = useMemo(() => {
   if (!effectiveWarehouseId) return "Main Warehouse";
   const found = warehouses.find((w) => String(w.id) === String(effectiveWarehouseId));
-  return found ? found.name : "Main Warehouse";
-}, [warehouses, effectiveWarehouseId]);
+  if (found) return found.name;
+  if (whLoading || warehouses.length === 0) return "Loading warehouse...";
+  return effectiveWarehouseId;
+}, [warehouses, effectiveWarehouseId, whLoading]);
 
 
 
@@ -1191,26 +1237,39 @@ const assignedWarehouseName = useMemo(() => {
           ))}
         </div>
 
-        {/* ══ DASHBOARD TAB ══ */}
-        {oTab==="dashboard" && (
-          dView==="add-product"
-            ? <AddProductView onCancel={()=>setDView("dashboard")} onSaved={()=>setDView("dashboard")}/>
-            : <div className="p-5 flex flex-col gap-5">
-                {products.length===0 && (
-                  <div className="rounded-2xl p-6 text-center"
-                    style={{ background:"var(--color-surface-1)", border:"1px dashed var(--color-border-soft)" }}>
-                    <p className="text-sm font-semibold" style={{ color:"var(--color-text-primary)" }}>
-                      No products yet
-                    </p>
-                    <p className="text-xs mt-1 mb-4" style={{ color:"var(--color-text-muted)" }}>
-                      Add your first product to start seeing real inventory value, stock, and order stats here.
-                    </p>
-                    <button onClick={()=>setDView("add-product")} className="px-4 py-2 rounded-xl text-sm font-semibold"
-                      style={{ background:"var(--color-brand-primary)", color:"white" }}>
-                      Add Product
-                    </button>
-                  </div>
-                )}
+  {/* ══ DASHBOARD TAB ══ */}
+{oTab==="dashboard" && (
+  dView==="add-product"
+    ? (
+      <AddProductView 
+        onCancel={() => setDView("dashboard")} 
+        onSaved={() => {
+          setDView("dashboard");
+          // ─── Refresh warehouses after product creation ───
+          loadWarehouses();
+        }}
+        onRefresh={() => {
+          // This is called from AddProductView after dispatch
+          loadWarehouses();
+        }}
+      />
+    )
+    : <div className="p-5 flex flex-col gap-5">
+        {products.length===0 && (
+          <div className="rounded-2xl p-6 text-center"
+            style={{ background:"var(--color-surface-1)", border:"1px dashed var(--color-border-soft)" }}>
+            <p className="text-sm font-semibold" style={{ color:"var(--color-text-primary)" }}>
+              No products yet
+            </p>
+            <p className="text-xs mt-1 mb-4" style={{ color:"var(--color-text-muted)" }}>
+              Add your first product to start seeing real inventory value, stock, and order stats here.
+            </p>
+            <button onClick={()=>setDView("add-product")} className="px-4 py-2 rounded-xl text-sm font-semibold"
+              style={{ background:"var(--color-brand-primary)", color:"white" }}>
+              Add Product
+            </button>
+          </div>
+        )}
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-faint)" }}>
@@ -1224,7 +1283,7 @@ const assignedWarehouseName = useMemo(() => {
                             <span style={{ color: "var(--color-info)" }}>🔒</span>
                             <span style={{ color: "var(--color-text-secondary)" }}>
                               You are viewing products for <strong style={{ color: "var(--color-text-primary)" }}>
-                                {warehouses.find(w => w.id === assignedWarehouseId)?.name || assignedWarehouseId}
+                                {assignedWarehouseName}
                               </strong>
                             </span>
                           </div>
@@ -1246,26 +1305,30 @@ const assignedWarehouseName = useMemo(() => {
 
                     {/* Warehouse Selector Dropdown */}
 {/* Warehouse Selector / Header View */}
-{isOwner ? (
+{isOwner || isAdmin ? (
   <select
     value={selectedWarehouseId ?? ""}
     onChange={(e) => setSelectedWarehouseId(e.target.value)}
-    
     className="rounded-xl px-3 py-2 text-xs outline-none w-full"
     style={S}
   >
     <option value="">All Warehouses</option>
-    {warehouses.map((w) => (
-      <option key={w.id} value={w.id}>
-        {w.name}
-      </option>
-    ))}
+    {/* Always show Main Warehouse as an option */}
+    {warehouses.length === 0 ? (
+      <option value="main_warehouse">Main Warehouse (Default)</option>
+    ) : (
+      warehouses.map((w) => (
+        <option key={w.id} value={w.id}>
+          {w.name} {w.isDefault ? "(Default)" : ""}
+        </option>
+      ))
+    )}
   </select>
 ) : (
-  /* Warehouse Admin: Restricted view to their assigned warehouse only */
+  /* Staff: Restricted view to their assigned warehouse only */
   <div className="px-3 py-1.5 font-semibold text-sm flex items-center gap-1.5" style={{ color: "var(--color-text-primary)" }}>
     <span>📍</span>
-    <span>{assignedWarehouseName}</span>
+    <span>{assignedWarehouseName || "Main Warehouse"}</span>
   </div>
 )}
                   </div>
@@ -1278,7 +1341,7 @@ const assignedWarehouseName = useMemo(() => {
   title="Total Inventory Value" 
   value={
     canViewFinancials
-      ? `$${totalInventoryValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+      ? formatCurrency(totalInventoryValue, settings.currencySymbol || "$", settings.currency || "USD")
       : "🔒 Restricted"
   } 
   change={canViewFinancials ? 5.2 : undefined} 
@@ -1900,8 +1963,11 @@ const isReceiver = Boolean(currentAssignedId && currentAssignedId === destinatio
 const isSender = Boolean(currentAssignedId && currentAssignedId === sourceId);
 
 // ─── 3. Strict Permissions ───
-// ONLY the destination warehouse staff can confirm receipt
-const canConfirm = isReceiver && (t.status === "pending" || t.status === "in_transit");
+// ONLY owners/admins can confirm receipt in the UI
+const canConfirm = (isOwner || isAdmin) && (t.status === "pending" || t.status === "in_transit");
+
+// Staff receivers see guidance when confirmation is required
+const needsAdminConfirmation = isReceiver && !canConfirm && (t.status === "pending" || t.status === "in_transit");
 
 // ONLY the sending warehouse staff OR global Owner can cancel
 const canCancel = (isSender || isOwner) && (t.status === "pending" || t.status === "draft");
@@ -1951,6 +2017,13 @@ return (
           >
             Confirm Receipt
           </button>
+        )}
+
+        {/* STAFF RECEIVER GUIDANCE: No button for staff, only a message */}
+        {needsAdminConfirmation && (
+          <span className="text-[11px] font-medium italic" style={{ color: "var(--color-warning)" }}>
+            Receipt confirmation is handled by administrators. Please contact your admin to finalize this transfer.
+          </span>
         )}
 
         {/* SENDER STATUS: Waiting on Destination */}
@@ -2485,7 +2558,7 @@ return (
   <OrderModal
     companyId={companyId}
     warehouseId={previewWarehouseId}
-    warehouseName={warehouses.find(w => w.id === previewWarehouseId)?.name || previewWarehouseId}
+    warehouseName={currentWarehouseName}
     products={displayedProducts}
     onClose={() => setShowOrderModal(false)}
     onOrderComplete={() => {

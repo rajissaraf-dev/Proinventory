@@ -1,7 +1,7 @@
 // src/components/dashboard/AddProductView.tsx
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux"; // ← ADD useDispatch
 import imageCompression from "browser-image-compression";
 import { MdImage, MdSave, MdCloudUpload } from "react-icons/md";
 import { FiChevronRight, FiTag, FiPackage, FiShield, FiDollarSign } from "react-icons/fi";
@@ -15,10 +15,12 @@ import { WarehouseService } from "../../services/warehouse.service";
 import { uploadImageToCloudinary } from "../../services/cloudinary.service";
 import useRole from "../../hooks/useRole";
 import { Category, Warehouse } from "../../types";
+import { addProduct } from "../../features/stock/stockSlice"; // ← ADD THIS
 
 interface AddProductViewProps {
   onCancel: () => void;
   onSaved: () => void;
+   onRefresh?: () => void;
 }
 
 // ─── Currency Configuration ───
@@ -62,8 +64,9 @@ const INPUT_STYLE = {
   outline: "none",
 };
 
-const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
+const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) => {
   const currentUser = useAuth();
+  const dispatch = useDispatch(); // ← ADD THIS
   const { assignedWarehouseId, hasWarehouseScope } = useRole();
   const companyId = useSelector((s: RootState) => s.auth.user?.companyId ?? "");
   const { settings } = useCompanySettings(companyId);
@@ -149,6 +152,10 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
     };
 
     const loadWarehouses = async () => {
+      if (!companyId) {
+        console.warn("⚠️ [AddProductView] No companyId available for loadWarehouses, skipping warehouse load.");
+        return;
+      }
       setWarehousesLoading(true);
       try {
         const list = await WarehouseService.list(companyId);
@@ -176,6 +183,7 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
       cancelled = true;
     };
   }, [companyId, assignedWarehouseId, hasWarehouseScope, loadCurrency]);
+
   // ─── Handle currency change ───
   const handleCurrencyChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const code = e.target.value;
@@ -240,51 +248,101 @@ const AddProductView = ({ onCancel, onSaved }: AddProductViewProps) => {
   };
 
   /* ── Save ── */
-  const handleSave = async () => {
-    if (!productName.trim()) { setError("Product name is required."); return; }
-    if (!category)           { setError("Please select a category."); return; }
-    if (!price)              { setError("Price is required."); return; }
-    if (!qty)                { setError("Quantity is required."); return; }
-    if (!size)               { setError("Packaging size is required."); return; }
-    if (!companyId)          { setError("Company context is not available yet."); return; }
-    if (!warehouseId)        { setError("Please select a warehouse for this product."); return; }
+ const handleSave = async () => {
+  if (!productName.trim()) { setError("Product name is required."); return; }
+  if (!category)           { setError("Please select a category."); return; }
+  if (!price)              { setError("Price is required."); return; }
+  if (!qty)                { setError("Quantity is required."); return; }
+  if (!size)               { setError("Packaging size is required."); return; }
+  if (!companyId)          { setError("Company context is not available yet."); return; }
+  if (!warehouseId)        { setError("Please select a warehouse for this product."); return; }
 
-    const selectedCategory = categories.find((item) => item.id === category);
-    const selectedWarehouse = warehouses.find((item) => item.id === warehouseId);
+  const selectedCategory = categories.find((item) => item.id === category);
+  const selectedWarehouse = warehouses.find((item) => item.id === warehouseId);
 
-    if (!selectedCategory) {
-      setError("Selected category is no longer available. Please choose another category.");
-      return;
+  if (!selectedCategory) {
+    setError("Selected category is no longer available. Please choose another category.");
+    return;
+  }
+
+  if (!selectedWarehouse) {
+    setError("Selected warehouse is no longer available. Please choose another warehouse.");
+    return;
+  }
+
+  setSaving(true);
+  try {
+    // ─── Create product in Firestore ───
+    const newProduct = await ProductService.create({
+      companyId,
+      createdBy: currentUser?.uid ?? "",
+      name: productName.trim(),
+      sku: `SKU-${Date.now().toString(36).toUpperCase()}`,
+      categoryId: selectedCategory.id,
+      categoryName: selectedCategory.name,
+      price: Number(price),
+      stockQuantity: Number(qty),
+      imageUrl: imgUrl ?? "",
+      size,
+      warehouseId: selectedWarehouse.id,
+      warehouseName: selectedWarehouse.name,
+    });
+
+    // ─── Determine stock status based on quantity ───
+    const stockQty = Number(qty);
+    let status: "in_stock" | "low_stock" | "out_of_stock";
+    if (stockQty <= 0) {
+      status = "out_of_stock";
+    } else if (stockQty <= 10) {
+      status = "low_stock";
+    } else {
+      status = "in_stock";
     }
 
-    if (!selectedWarehouse) {
-      setError("Selected warehouse is no longer available. Please choose another warehouse.");
-      return;
-    }
+    // ─── Build product data for Redux ───
+    const productData = {
+      id: newProduct.id,
+      name: productName.trim(),
+      product_name: productName.trim(),
+      price: Number(price),
+      product_Price: Number(price),
+      stockQuantity: stockQty,
+      product_Qty: stockQty,
+      categoryId: selectedCategory.id,
+      categoryName: selectedCategory.name,
+      status: status, // ← Now using the correct status
+      companyId: companyId,
+      createdBy: currentUser?.uid ?? "",
+      warehouseId: selectedWarehouse.id,
+      warehouseName: selectedWarehouse.name,
+      imageUrl: imgUrl ?? "",
+      size,
+      sku: `SKU-${Date.now().toString(36).toUpperCase()}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
-    setSaving(true);
+    // ─── Safely dispatch to Redux ───
     try {
-      await ProductService.create({
-        companyId,
-        createdBy: currentUser?.uid ?? "",
-        name: productName.trim(),
-        sku: `SKU-${Date.now().toString(36).toUpperCase()}`,
-        categoryId: selectedCategory.id,
-        categoryName: selectedCategory.name,
-        price: Number(price),
-        stockQuantity: Number(qty),
-        imageUrl: imgUrl ?? "",
-        size,
-        warehouseId: selectedWarehouse.id,
-        warehouseName: selectedWarehouse.name,
-      });
-      onSaved();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
+      dispatch(addProduct(productData));
+      console.log(`✅ [AddProductView] Product dispatched to Redux: ${productName}`);
+    } catch (dispatchErr) {
+      console.warn("⚠️ [AddProductView] Redux dispatch failed, but product saved to Firestore:", dispatchErr);
     }
-  };
+
+    // ─── Call onSaved to return to dashboard ───
+    onSaved();
+
+    // ─── Call onRefresh if provided ───
+    if (onRefresh) {
+      onRefresh();
+    }
+  } catch (err) {
+    setError((err as Error).message);
+  } finally {
+    setSaving(false);
+  }
+};
 
   /* ── Input shared class ── */
   const inputCls = "w-full rounded-lg px-3 py-2.5 text-sm transition-all";

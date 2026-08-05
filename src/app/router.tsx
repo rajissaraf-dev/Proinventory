@@ -14,7 +14,7 @@ const NotFoundPage      = lazy(() => import("../pages/NotFoundPage"));
 /* ── Authenticated pages ── */
 const OwnerDashboardPage  = lazy(() => import("../pages/OwnerDashboardPage"));
 const ProductsPage        = lazy(() => import("../pages/ProductsPage"));
-const MessagesPage        = lazy(() => import("../pages/MessagesPage"));
+// Messages feature removed
 
 const AppRouter = () => (
   <Suspense fallback={<LoadingSpinner />}>
@@ -42,7 +42,7 @@ const AppRouter = () => (
 
           <Route path="dashboard" element={<OwnerDashboardPage />} />
           <Route path="products" element={<ProductsPage />} />
-          <Route path="messages" element={<MessagesPage />} /> {/* ← ADDED */}
+          {/* Messages route removed */}
 
           <Route path="superadmin" element={<Navigate to="/owner" replace />} />
 

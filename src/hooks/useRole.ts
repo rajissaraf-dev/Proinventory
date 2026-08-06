@@ -26,7 +26,9 @@ const useRole = () => {
   const isAdmin = role === "company_admin";
   const isStaff = role === "staff";
   const isOwnerOrAdmin = isOwner || isAdmin;
-  const hasWarehouseScope = isStaff && !!assignedWarehouseId;
+  // hasWarehouseScope: true when the user is locked to a specific warehouse
+  // Applies to staff with an assignment, AND admins with an assignment
+  const hasWarehouseScope = (isStaff || isAdmin) && !!assignedWarehouseId;
 
   /* ─── Permission helpers ─── */
   type PermissionModule = keyof UserPermissions;

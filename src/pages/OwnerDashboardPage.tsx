@@ -230,22 +230,27 @@ const OwnerDashboardPage = () => {
     assignedId?: string, 
     isDefault?: boolean
   ) => {
-    // Owner can see all warehouses
+    // Owner always sees all warehouses
     if (role === 'company_owner') {
       return true;
     }
     
-    // Admin can see all warehouses (they manage inventory)
-    if (role === 'company_admin') {
+    // Admin with an assigned warehouse — restricted to that warehouse only
+    if (role === 'company_admin' && assignedId) {
+      return warehouseId === assignedId;
+    }
+    
+    // Admin without an assignment — sees all warehouses
+    if (role === 'company_admin' && !assignedId) {
       return true;
     }
     
-    // Staff with assigned warehouse - ONLY see their assigned warehouse
+    // Staff with assigned warehouse — ONLY see their assigned warehouse
     if (role === 'staff' && assignedId) {
       return warehouseId === assignedId;
     }
     
-    // Staff without assigned warehouse - can see the default warehouse
+    // Staff without assigned warehouse — can see the default warehouse
     if (role === 'staff' && !assignedId) {
       return isDefault || warehouseId === 'main_warehouse';
     }
@@ -546,7 +551,7 @@ const OwnerDashboardPage = () => {
       
       // ─── CRITICAL: Set selected warehouse ───
       if (sorted.length > 0) {
-        // For staff with assigned warehouse, force use it
+        // For any role with an assigned warehouse (admin or staff), lock to it
         if (assignedWarehouseId && sorted.some(w => w.id === assignedWarehouseId)) {
           setSelectedWarehouseId(assignedWarehouseId);
         } 
@@ -559,7 +564,7 @@ const OwnerDashboardPage = () => {
             setSelectedWarehouseId(sorted[0].id);
           }
         }
-        // For owners/admins, use the first warehouse (usually default)
+        // For owners (and admins without assignment), default to the first/default warehouse
         else {
           const defaultWh = sorted.find(w => w.isDefault || w.id === 'main_warehouse');
           setSelectedWarehouseId(defaultWh?.id || sorted[0].id);
@@ -573,9 +578,9 @@ const OwnerDashboardPage = () => {
   }, [assignedWarehouseId, companyId, profile?.role]);
 
   useEffect(() => {
-    // Force reload warehouses when sub-warehouse staff logs in
+    // Force reload warehouses when a role-scoped user (admin or staff with assignment) logs in
     if (companyId && hasWarehouseScope && assignedWarehouseId) {
-      console.log('🔄 [OwnerDashboard] Sub-warehouse staff detected, loading assigned warehouse:', assignedWarehouseId);
+      console.log('🔄 [OwnerDashboard] Scoped user detected, loading assigned warehouse:', assignedWarehouseId);
       loadWarehouses();
     }
   }, [companyId, hasWarehouseScope, assignedWarehouseId, loadWarehouses]);
@@ -1279,7 +1284,7 @@ const OwnerDashboardPage = () => {
                       </p>
                     </div>
                     <div className="min-w-55">
-                      {isOwner || isAdmin ? (
+                      {(isOwner || (isAdmin && !hasWarehouseScope)) ? (
                         <select
                           value={selectedWarehouseId ?? ""}
                           onChange={(e) => setSelectedWarehouseId(e.target.value)}

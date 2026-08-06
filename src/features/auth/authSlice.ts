@@ -14,7 +14,7 @@ type FirestoreUserData = DocumentData & {
   companyId?: string;
   email?: string;
   displayName?: string;
-  permissions?: Record<string, unknown>;
+  permissions?: unknown;
   assignedWarehouseId?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -29,7 +29,7 @@ interface RawUserData {
   companyId?: string;
   email?: string;
   displayName?: string;
-  permissions?: Record<string, unknown>;
+  permissions?: unknown;
   assignedWarehouseId?: string;
   createdAt?: unknown;
   updatedAt?: unknown;

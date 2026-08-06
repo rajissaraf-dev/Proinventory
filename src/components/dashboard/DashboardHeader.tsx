@@ -31,6 +31,9 @@ const DashboardHeader = ({
 }: DashboardHeaderProps) => {
   const [localCount, setLocalCount] = useState(notificationCount);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
   const authUser = useSelector((s: RootState) => s.auth.user);
   const profile = useSelector((s: RootState) => s.auth.profile);
   const companyId = useAppSelector(s => s.auth.profile?.companyId ?? s.auth.user?.companyId) ?? "";
@@ -41,7 +44,15 @@ const DashboardHeader = ({
   const maxRetries = 3;
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const sidebarWidth = isSidebarCollapsed ? 64 : 220;
+  // Keep isMobile in sync with viewport resizes
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // On mobile the sidebar slides off-screen — header must span the full viewport width
+  const sidebarWidth = isMobile ? 0 : (isSidebarCollapsed ? 64 : 220);
 
   const loadCount = async () => {
     if (!companyId) return;
@@ -142,38 +153,31 @@ const DashboardHeader = ({
 
   return (
     <header
-      className="fixed top-0 z-30 flex items-center gap-4 px-5 h-14 transition-all duration-300"
+      className="fixed top-0 z-30 flex items-center gap-3 h-14 transition-all duration-300"
       style={{
         left: `${sidebarWidth}px`,
         right: 0,
+        // On mobile give left padding to clear the sidebar hamburger button (w-9 at left-3 = 48px)
+        paddingLeft: isMobile ? "52px" : "20px",
+        paddingRight: "20px",
         background: "var(--color-bg-header)",
         borderBottom: "1px solid var(--color-border-subtle)",
         backdropFilter: "blur(8px)",
         width: `calc(100% - ${sidebarWidth}px)`,
       }}
     >
-      {/* App Brand / Breadcrumb */}
+      {/* Brand / breadcrumb — always visible */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        {onMenuClick && (
-          <button
-            onClick={onMenuClick}
-            className="sm:hidden w-9 h-9 flex items-center justify-center rounded-lg"
-            style={{ background: "var(--color-surface-2)", color: "var(--color-text-muted)", border: "1px solid var(--color-border-soft)" }}
-            aria-label="Toggle menu"
-          >
-            ☰
-          </button>
-        )}
-        <div className="hidden sm:block">
+        <div>
           <p className="text-sm font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>
             Dashboard
           </p>
-          <p className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
-            {new Date().toLocaleDateString('en-US', { 
-              weekday: 'short', 
-              month: 'short', 
+          <p className="hidden sm:block text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+            {new Date().toLocaleDateString('en-US', {
+              weekday: 'short',
+              month: 'short',
               day: 'numeric',
-              year: 'numeric'
+              year: 'numeric',
             })}
           </p>
         </div>

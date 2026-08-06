@@ -2012,19 +2012,9 @@ const OwnerDashboardPage = () => {
                                     Confirm Receipt
                                   </button>
                                 )}
-                                {needsAdminConfirmation && (
-                                  <span className="text-[11px] font-medium italic" style={{ color: "var(--color-warning)" }}>
-                                    Receipt confirmation is handled by administrators. Please contact your admin to finalize this transfer.
-                                  </span>
-                                )}
-                                {isSender && !isOwner && (t.status === "pending" || t.status === "in_transit") && (
+                                {showAwaiting && (
                                   <span className="text-[11px] font-medium italic" style={{ color: "var(--color-warning)" }}>
                                     Awaiting Receiver Confirmation
-                                  </span>
-                                )}
-                                {isOwner && (t.status === "pending" || t.status === "in_transit") && (
-                                  <span className="text-[11px] font-medium italic" style={{ color: "var(--color-text-muted)" }}>
-                                    Pending Destination Receipt
                                   </span>
                                 )}
                                 {canCancel && (

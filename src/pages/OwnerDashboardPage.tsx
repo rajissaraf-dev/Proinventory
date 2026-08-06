@@ -1238,8 +1238,13 @@ const OwnerDashboardPage = () => {
 
         {/* Navigation Tab Bar */}
         <div
-          className="flex items-center gap-0.5 px-5 pt-4 pb-0 overflow-x-auto shrink-0"
-          style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
+          className="flex items-center gap-0.5 px-2 sm:px-5 pt-3 pb-0 overflow-x-auto shrink-0 no-scrollbar"
+          style={{
+            borderBottom: "1px solid var(--color-border-subtle)",
+            scrollbarWidth: "none",       /* Firefox */
+            msOverflowStyle: "none",      /* IE/Edge */
+            WebkitOverflowScrolling: "touch",
+          }}
         >
           {TABS.map(({ id, icon, label }) => (
             <button
@@ -1248,14 +1253,22 @@ const OwnerDashboardPage = () => {
                 setOTab(id);
                 if (id === "dashboard") setDView("dashboard");
               }}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 shrink-0"
+              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 shrink-0 transition-colors"
               style={{
                 color: oTab === id ? "var(--color-brand-primary-soft)" : "var(--color-text-muted)",
                 borderColor: oTab === id ? "var(--color-brand-primary-soft)" : "transparent",
                 background: "transparent",
               }}
+              title={label}
             >
-              {icon} {label}
+              {/* Icon always visible; label hidden on mobile */}
+              <span className={oTab === id ? "" : ""}>{icon}</span>
+              <span className="hidden sm:inline">{label}</span>
+              {/* Active dot on mobile so user knows which tab is selected */}
+              <span className="sm:hidden text-[10px] font-semibold leading-none" style={{
+                color: oTab === id ? "var(--color-brand-primary-soft)" : "transparent",
+                fontSize: "5px",
+              }}>●</span>
             </button>
           ))}
         </div>

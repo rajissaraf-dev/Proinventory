@@ -1,5 +1,5 @@
 // services/firebase.ts - BACK TO BASICS
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   EmailAuthProvider,
   getAuth,
@@ -21,16 +21,28 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_MEASUREMENT_ID as string,
 };
 
-const app = initializeApp(firebaseConfig);
+console.info("🔥 [Firebase] Project:", firebaseConfig.projectId);
+
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 export const provider = new EmailAuthProvider();
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-const db = getFirestore(app);
+export const db = getFirestore(app);
 export default db;
 
-export function logOut(): Promise<void> {
+export async function logOut(): Promise<void> {
+  if (auth.currentUser?.isAnonymous && auth.currentUser.uid) {
+    try {
+      const mod = await import("./session.service");
+      await mod.SessionService.deleteGuestData(auth.currentUser.uid).catch((error) => {
+        console.warn("⚠️ [firebase] Guest cleanup failed:", error);
+      });
+    } catch (e) {
+      console.warn("⚠️ [firebase] Failed to load session service for guest cleanup:", e);
+    }
+  }
   return signOut(auth);
 }
 

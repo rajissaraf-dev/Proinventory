@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaBars, FaTimes, FaChevronDown } from "react-icons/fa";
-import { useAuth, logOut } from "../../services/firebase";
+import { useAuth, auth, logOut } from "../../services/firebase";
 import useAppSelector from "../../hooks/useAppSelector";
 import { clearCurrentUser } from "../../features/auth/authSlice";
 import { clearCompany } from "../../features/company/companySlice";
@@ -37,11 +37,16 @@ const Navbar = () => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   const handleLogout = async () => {
-    await logOut();
-    dispatch(clearCurrentUser());
-    dispatch(clearCompany());
-    sessionStorage.removeItem("currentUser");
-    navigate("/");
+    try {
+      await logOut();
+      dispatch(clearCurrentUser());
+      dispatch(clearCompany());
+      sessionStorage.removeItem("currentUser");
+      navigate("/");
+    } catch (err) {
+      console.error("Logout error:", err);
+      alert((err as Error).message || "Failed to log out. Please try again.");
+    }
   };
 
   const toggleDropdown = (label: string) =>
@@ -305,3 +310,4 @@ const Navbar = () => {
 };
 
 export default Navbar;
+

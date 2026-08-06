@@ -1,6 +1,30 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { Product, ProductState } from "../../types";
 
+const toSerializableValue = (value: unknown): unknown => {
+  if (!value) return value;
+
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    const maybeDate = value as { toDate?: () => Date };
+    if (typeof maybeDate.toDate === "function") {
+      return maybeDate.toDate().toISOString();
+    }
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return value;
+};
+
+const normalizeProduct = (product: Product): Product => ({
+  ...product,
+  createdAt: toSerializableValue(product.createdAt) as Product["createdAt"],
+  updatedAt: toSerializableValue(product.updatedAt) as Product["updatedAt"],
+  timestamp: product.timestamp ? toSerializableValue(product.timestamp) as Product["timestamp"] : product.timestamp,
+});
+
 const initialState: ProductState = {
   productData: [],
   isLoading: true,
@@ -11,7 +35,7 @@ const stockSlice = createSlice({
   initialState,
   reducers: {
     setStockData(state, action: PayloadAction<Product[]>) {
-      state.productData = action.payload;
+      state.productData = action.payload.map(normalizeProduct);
       state.isLoading = false;
     },
     // ✅ ADD THIS REDUCER
@@ -19,12 +43,12 @@ const stockSlice = createSlice({
       const { id, changes } = action.payload;
       const index = state.productData.findIndex(p => p.id === id);
       if (index !== -1) {
-        state.productData[index] = { ...state.productData[index], ...changes };
+        state.productData[index] = normalizeProduct({ ...state.productData[index], ...changes });
       }
     },
     // ✅ ADD THIS REDUCER (optional - for adding new products)
     addProduct: (state, action: PayloadAction<Product>) => {
-      state.productData.push(action.payload);
+      state.productData.push(normalizeProduct(action.payload));
     },
     // ✅ ADD THIS REDUCER (optional - for removing products)
     removeProduct: (state, action: PayloadAction<string>) => {

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import { MdNotifications, MdHelp, MdLogout, MdSettings, MdPerson } from "react-icons/md";
-import { FiMenu } from "react-icons/fi";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
 import { NotificationService } from "../../services/notification.service";
@@ -16,19 +15,19 @@ import { clearCompany } from "../../features/company/companySlice";
 type Timeout = ReturnType<typeof setTimeout>;
 
 interface DashboardHeaderProps {
-  onMenuClick: () => void;
   notificationCount?: number;
   onNotificationCountChange?: (count: number) => void;
   onNotificationClick?: () => void;
   isSidebarCollapsed?: boolean;
+  onMenuClick?: () => void;
 }
 
 const DashboardHeader = ({ 
-  onMenuClick, 
   notificationCount = 0,
   onNotificationCountChange,
   onNotificationClick,
   isSidebarCollapsed = false,
+  onMenuClick,
 }: DashboardHeaderProps) => {
   const [localCount, setLocalCount] = useState(notificationCount);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -42,7 +41,6 @@ const DashboardHeader = ({
   const maxRetries = 3;
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // ─── Calculate header position ───
   const sidebarWidth = isSidebarCollapsed ? 64 : 220;
 
   const loadCount = async () => {
@@ -151,21 +149,21 @@ const DashboardHeader = ({
         background: "var(--color-bg-header)",
         borderBottom: "1px solid var(--color-border-subtle)",
         backdropFilter: "blur(8px)",
-        width: `calc(100% - ${sidebarWidth}px)`, // ─── KEY: Dynamic width ───
+        width: `calc(100% - ${sidebarWidth}px)`,
       }}
     >
-      {/* Hamburger - only visible on mobile when sidebar is hidden */}
-      <button
-        onClick={onMenuClick}
-        className="flex md:hidden w-8 h-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-3 shrink-0"
-        style={{ color: "var(--color-text-muted)" }}
-        aria-label="Toggle sidebar"
-      >
-        <FiMenu size={18} />
-      </button>
-
       {/* App Brand / Breadcrumb */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
+        {onMenuClick && (
+          <button
+            onClick={onMenuClick}
+            className="sm:hidden w-9 h-9 flex items-center justify-center rounded-lg"
+            style={{ background: "var(--color-surface-2)", color: "var(--color-text-muted)", border: "1px solid var(--color-border-soft)" }}
+            aria-label="Toggle menu"
+          >
+            ☰
+          </button>
+        )}
         <div className="hidden sm:block">
           <p className="text-sm font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>
             Dashboard

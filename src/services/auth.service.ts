@@ -58,7 +58,6 @@ const buildUserProfile = (
   companyId,
   role,
   status:       "active",
-  // ─── REMOVED: isSuperAdmin ───
   permissions:  permissions ?? DEFAULT_PERMISSIONS[role],
   assignedWarehouseId: "",
   createdAt:    new Date(),

@@ -1,16 +1,16 @@
 // services/session.service.ts
 import { 
+  collection,
+  deleteDoc,
   doc, 
-  setDoc, 
-  deleteDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  Timestamp, 
   getDoc,
+  getDocs,
+  query, 
+  Timestamp, 
+  where, 
   DocumentData,
   QueryDocumentSnapshot,
+  setDoc,
 } from "firebase/firestore";
 import db from "./firebase";
 // ✅ Removed unused import: getSecureToken
@@ -183,6 +183,20 @@ export const SessionService = {
     } catch (error) {
       console.error('Failed to get session:', error);
       return null;
+    }
+  },
+
+  async deleteGuestData(uid: string): Promise<void> {
+    try {
+      const guestDocRef = doc(db, "guests", uid);
+      const collectionsSnapshot = await getDocs(collection(guestDocRef, "sample"));
+      if (!collectionsSnapshot.empty) {
+        await Promise.all(collectionsSnapshot.docs.map((docSnapshot) => deleteDoc(docSnapshot.ref)));
+      }
+      console.log(`✅ [SessionService] cleaned guest data for uid=${uid}`);
+    } catch (error) {
+      console.error('Failed to delete guest data:', error);
+      throw error;
     }
   },
 

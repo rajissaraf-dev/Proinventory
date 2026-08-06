@@ -202,10 +202,52 @@ VITE_CLOUDINARY_UPLOAD_PRESET=your_unsigned_upload_preset
 
 > ⚠️ Never commit your `.env` file. It is already listed in `.gitignore`.
 
+If you want a separate demo/test Firebase project, create a `.env.demo` file with the same variables and use it only for your demo deployment.
+
+Example `.env.demo`:
+
+```env
+VITE_FIREBASE_KEY=your_demo_firebase_api_key_here
+VITE_FIREBASE_AUTH_DOMAIN=your_demo_project_id.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your_demo_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_demo_project_id.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_demo_sender_id
+VITE_FIREBASE_APP_ID=your_demo_app_id
+VITE_MEASUREMENT_ID=your_demo_measurement_id
+
+VITE_CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+VITE_CLOUDINARY_UPLOAD_PRESET=your_cloudinary_upload_preset
+
+VITE_RECAPTCHA_SITE_KEY=your_demo_recaptcha_site_key
+RECAPTCHA_SECRET_KEY=your_demo_recaptcha_secret_key
+```
+
+To run the demo environment locally with Vite mode `demo`:
+
+```bash
+npm run dev:demo
+```
+
+To build the demo site:
+
+```bash
+npm run build:demo
+```
+
+To preview a demo build locally:
+
+```bash
+npm run preview:demo
+```
+
 ### 3.1 — Optional owner seed
 
 If you want to create a single owner account in Firebase and a matching company record,
 set the following additional values in `.env` and run `npm run seed:owner` once.
+
+### Demo branch notes
+
+For demo-oriented changes, use the `demo/guest-flow` branch and see [DEMO.md](DEMO.md) for local run, deployment, cleanup, and TTL instructions.
 
 ```env
 VITE_OWNER_EMAIL=owner@example.com

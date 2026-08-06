@@ -1350,11 +1350,12 @@ const OwnerDashboardPage = () => {
                       } 
                       change={canViewFinancials ? 5.2 : undefined} 
                       sparkData={canViewFinancials ? SPARKS.value : undefined} 
-                      sparkColor={canViewFinancials ? "var(--color-chart-indigo)" : undefined} 
-                      iconBg={canViewFinancials ? "var(--color-nav-active-bg)" : "var(--color-surface-3)"} 
+                      sparkColor="#06b6d4"
+                      accentColor="#06b6d4"
+                      iconBg="rgba(6,182,212,0.15)"
                       icon={
                         canViewFinancials ? (
-                          <MdAttachMoney size={18} style={{ color: "var(--color-brand-primary-soft)" }} />
+                          <MdAttachMoney size={18} style={{ color: "#06b6d4" }} />
                         ) : (
                           <MdLock size={18} style={{ color: "var(--color-text-faint)" }} />
                         )
@@ -1365,27 +1366,30 @@ const OwnerDashboardPage = () => {
                       value={totalStockOnHand.toLocaleString()} 
                       change={3.7} 
                       sparkData={SPARKS.stock} 
-                      sparkColor="var(--color-chart-green)" 
-                      iconBg="var(--color-stock-in-soft)" 
-                      icon={<MdInventory2 size={18} style={{ color: "var(--color-stock-in)" }} />} 
+                      sparkColor="#22c55e"
+                      accentColor="#22c55e"
+                      iconBg="rgba(34,197,94,0.15)"
+                      icon={<MdInventory2 size={18} style={{ color: "#22c55e" }} />} 
                     />
                     <StatCard 
-                      title="Out of Stock" 
+                      title="Items Out of Stock" 
                       value={String(outOfStockCount)} 
                       change={-12.4} 
                       sparkData={SPARKS.out} 
-                      sparkColor="var(--color-chart-red)" 
-                      iconBg="var(--color-stock-out-soft)" 
-                      icon={<MdRemoveShoppingCart size={18} style={{ color: "var(--color-stock-out)" }} />} 
+                      sparkColor="#ef4444"
+                      accentColor="#ef4444"
+                      iconBg="rgba(239,68,68,0.15)"
+                      icon={<MdRemoveShoppingCart size={18} style={{ color: "#ef4444" }} />} 
                     />
                     <StatCard 
                       title="Pending Orders" 
                       value={String(pendingOrders)} 
-                      change={0} 
+                      change={-8.1} 
                       sparkData={SPARKS.orders} 
-                      sparkColor="var(--color-chart-purple)" 
-                      iconBg="var(--color-order-pending-soft)" 
-                      icon={<MdShoppingCart size={18} style={{ color: "var(--color-order-pending)" }} />} 
+                      sparkColor="#a855f7"
+                      accentColor="#a855f7"
+                      iconBg="rgba(168,85,247,0.15)"
+                      icon={<MdShoppingCart size={18} style={{ color: "#a855f7" }} />} 
                     />
                   </div>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1950,11 +1954,23 @@ const OwnerDashboardPage = () => {
                         const sourceId = t.fromWarehouseId ? String(t.fromWarehouseId) : null;
 
                         const isReceiver = Boolean(currentAssignedId && currentAssignedId === destinationId);
-                        const isSender = Boolean(currentAssignedId && currentAssignedId === sourceId);
+                        const isSender   = Boolean(currentAssignedId && currentAssignedId === sourceId);
 
-                        const canConfirm = (isOwner || isAdmin) && (t.status === "pending" || t.status === "in_transit");
-                        const needsAdminConfirmation = isReceiver && !canConfirm && (t.status === "pending" || t.status === "in_transit");
-                        const canCancel = (isSender || isOwner) && (t.status === "pending" || t.status === "draft");
+                        // Owner (no warehouse scope) can manage everything
+                        const isUnscoped = isOwner && !currentAssignedId;
+
+                        const isActive = t.status === "pending" || t.status === "in_transit";
+                        const isCancellable = t.status === "pending" || t.status === "draft";
+
+                        // Confirm Receipt: only the receiving warehouse (or unscoped owner)
+                        const canConfirm = isActive && (isReceiver || isUnscoped);
+
+                        // Awaiting label: shown to the sender while waiting for receiver to confirm
+                        const showAwaiting = isActive && isSender && !isReceiver;
+
+                        // Cancel: sender, owner, or unscoped admin can cancel
+                        const canCancel = isCancellable && (isSender || isUnscoped || (isAdmin && !currentAssignedId));
+
                         const totalItems = (t.items ?? []).reduce((sum, item) => sum + (item.quantity || 0), 0);
 
                         return (

@@ -29,7 +29,7 @@ ChartJS.register(
 );
 
 /* ─────────────────────────────────────────────────────────────
-   MINI SPARKLINE (enhanced)
+   MINI SPARKLINE (edge-to-edge, filled)
 ───────────────────────────────────────────────────────────── */
 interface SparklineProps {
   data: number[];
@@ -38,12 +38,11 @@ interface SparklineProps {
 }
 
 const Sparkline = ({ data, color, fill = true }: SparklineProps) => {
-  // Guard against empty data
   if (!data || data.length === 0) {
     return (
-      <div className="h-12 flex items-center justify-center">
+      <div className="h-14 flex items-center justify-center">
         <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
-          No data available
+          No data
         </span>
       </div>
     );
@@ -56,48 +55,35 @@ const Sparkline = ({ data, color, fill = true }: SparklineProps) => {
         datasets: [{
           data,
           borderColor: color,
-          backgroundColor: fill ? `${color}22` : "transparent",
+          backgroundColor: fill ? `${color}30` : "transparent",
           borderWidth: 2,
           pointRadius: 0,
-          pointHoverRadius: 4,
-          tension: 0.4,
+          pointHoverRadius: 0,
+          tension: 0.45,
           fill,
         }],
       }}
       options={{
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { 
-          legend: { display: false }, 
-          tooltip: { 
-            enabled: true,
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            titleColor: '#fff',
-            bodyColor: '#e2e8f0',
-            cornerRadius: 8,
-            padding: 8,
-          } 
-        },
-        scales: { 
-          x: { display: false }, 
-          y: { display: false } 
-        },
-        animation: {
-          duration: 600,
-          easing: 'easeInOutQuart',
-        },
-        interaction: {
-          intersect: false,
-          mode: 'index',
-        },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: { x: { display: false }, y: { display: false } },
+        animation: { duration: 800, easing: "easeInOutQuart" },
+        layout: { padding: 0 },
+        elements: { line: { borderCapStyle: "round", borderJoinStyle: "round" } },
       }}
-      style={{ height: "48px" }}
+      style={{ height: "56px", display: "block" }}
     />
   );
 };
 
 /* ─────────────────────────────────────────────────────────────
-   STAT CARD (enhanced with restricted state)
+   STAT CARD — matches reference design
+   • Dark surface with subtle colored left-border accent
+   • Icon badge top-right in matching tint
+   • Large bold value
+   • Trend % beneath value
+   • Full-width edge-to-edge sparkline at bottom (no padding)
 ───────────────────────────────────────────────────────────── */
 interface StatCardProps {
   title: string;
@@ -108,96 +94,97 @@ interface StatCardProps {
   iconBg: string;
   icon: React.ReactNode;
   restricted?: boolean;
+  accentColor?: string; // left-border / glow accent
 }
 
-export const StatCard = ({ 
-  title, 
-  value, 
-  change, 
-  sparkData, 
-  sparkColor, 
-  iconBg, 
-  icon, 
+export const StatCard = ({
+  title,
+  value,
+  change,
+  sparkData,
+  sparkColor,
+  iconBg,
+  icon,
   restricted = false,
+  accentColor,
 }: StatCardProps) => {
   const positive = change !== undefined && change >= 0;
-  const showTrend = change !== undefined && !restricted;
-  
-  // Determine trend icon
-  const TrendIcon = () => {
-    if (restricted) return null;
-    if (positive) return <MdTrendingUp style={{ color: "var(--color-success)" }} />;
-    if (change !== undefined && change < 0) return <MdTrendingDown style={{ color: "var(--color-danger)" }} />;
-    return null;
-  };
+  const trendColor = positive ? "#22c55e" : "#ef4444";
+  const accent = accentColor ?? sparkColor ?? "var(--color-brand-primary-soft)";
 
   return (
     <div
-      className="rounded-2xl p-5 transition-all duration-300 hover:shadow-lg hover:scale-[1.01] group"
+      className="rounded-2xl flex flex-col overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.01] group relative"
       style={{
         background: "var(--color-surface-1)",
-        border: `1px solid ${restricted ? "var(--color-border-soft)" : "var(--color-border-soft)"}`,
-        opacity: restricted ? 0.85 : 1,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        border: "1px solid var(--color-border-soft)",
+        borderLeft: `3px solid ${accent}`,
+        boxShadow: `0 2px 12px rgba(0,0,0,0.15)`,
+        opacity: restricted ? 0.8 : 1,
       }}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
-            {title}
-          </p>
-          <p
-            className={`text-2xl font-extrabold mt-1 transition-all ${
-              restricted ? "tracking-wider" : ""
-            }`}
-            style={{
-              color: restricted ? "var(--color-text-muted)" : "var(--color-text-primary)",
-            }}
-          >
-            {value}
-          </p>
-          {!restricted && showTrend && (
-            <div className="flex items-center gap-1.5 mt-1">
-              <div className="flex items-center gap-0.5 text-xs font-medium">
-                <TrendIcon />
-                <span style={{ color: positive ? "var(--color-success)" : "var(--color-danger)" }}>
-                  {positive ? "+" : ""}{change}%
-                </span>
-              </div>
-              <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
-                vs last 30 days
-              </span>
-            </div>
-          )}
-          {restricted && (
-            <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: "var(--color-text-faint)" }}>
-              <MdLock size={12} /> Owner only
-            </p>
-          )}
-        </div>
+      {/* Top section — title + icon */}
+      <div className="flex items-start justify-between px-5 pt-4 pb-2">
+        <p
+          className="text-[11px] font-semibold uppercase tracking-widest"
+          style={{ color: "var(--color-text-faint)" }}
+        >
+          {title}
+        </p>
         <div
-          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all group-hover:scale-105"
-          style={{
-            background: restricted ? "var(--color-surface-3)" : iconBg,
-          }}
+          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all group-hover:scale-105"
+          style={{ background: restricted ? "var(--color-surface-3)" : iconBg }}
         >
           {icon}
         </div>
       </div>
 
-      {/* Sparkline */}
-      {!restricted && sparkData && sparkData.length > 0 && (
-        <div className="mt-3 h-12">
-          <Sparkline data={sparkData} color={sparkColor || "var(--color-brand-primary-soft)"} />
-        </div>
-      )}
-      {restricted && (
-        <div className="mt-3 h-12 flex items-center justify-center rounded-lg" style={{ background: "var(--color-surface-2)" }}>
-          <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
-            🔒 Financial data restricted
-          </span>
-        </div>
-      )}
+      {/* Value */}
+      <div className="px-5 pb-2">
+        <p
+          className="text-[1.75rem] font-extrabold leading-none tracking-tight"
+          style={{ color: restricted ? "var(--color-text-muted)" : "var(--color-text-primary)" }}
+        >
+          {value}
+        </p>
+
+        {/* Trend */}
+        {!restricted && change !== undefined && (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            {positive
+              ? <MdTrendingUp size={14} style={{ color: trendColor }} />
+              : <MdTrendingDown size={14} style={{ color: trendColor }} />}
+            <span className="text-xs font-semibold" style={{ color: trendColor }}>
+              {positive ? "+" : ""}{change}%
+            </span>
+            <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+              vs last 30 days
+            </span>
+          </div>
+        )}
+
+        {restricted && (
+          <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: "var(--color-text-faint)" }}>
+            <MdLock size={11} /> Owner only
+          </p>
+        )}
+      </div>
+
+      {/* Sparkline — edge-to-edge, no horizontal padding */}
+      <div className="mt-auto" style={{ height: "56px" }}>
+        {!restricted && sparkData && sparkData.length > 0 ? (
+          <Sparkline data={sparkData} color={sparkColor || accent} />
+        ) : restricted ? (
+          <div
+            className="h-full flex items-center justify-center"
+            style={{ background: "var(--color-surface-2)" }}
+          >
+            <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+              🔒 Restricted
+            </span>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 };

@@ -315,8 +315,9 @@ const handleSell = (product: Product) => {
       {/* Right column — header + content stacked */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Sticky header — works correctly inside RootLayout's scroll container */}
-        <div className="sticky top-0 z-30">
+        <div style={{ position: "relative" }}>
           <DashboardHeader
+            sticky
             onMenuClick={handleToggleSidebar}
             isSidebarCollapsed={isSidebarCollapsed}
             onNotificationClick={() => navigate("/dashboard?tab=notifications")}

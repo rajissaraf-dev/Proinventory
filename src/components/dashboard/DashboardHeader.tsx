@@ -20,6 +20,8 @@ interface DashboardHeaderProps {
   onNotificationClick?: () => void;
   isSidebarCollapsed?: boolean;
   onMenuClick?: () => void;
+  /** When true, renders as sticky in-flow instead of fixed (use inside flex-column layouts) */
+  sticky?: boolean;
 }
 
 const DashboardHeader = ({ 
@@ -28,6 +30,7 @@ const DashboardHeader = ({
   onNotificationClick,
   isSidebarCollapsed = false,
   onMenuClick,
+  sticky = false,
 }: DashboardHeaderProps) => {
   const [localCount, setLocalCount] = useState(notificationCount);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -153,17 +156,16 @@ const DashboardHeader = ({
 
   return (
     <header
-      className="fixed top-0 z-30 flex items-center gap-3 h-14 transition-all duration-300"
+      className={`${sticky ? "sticky top-0" : "fixed top-0"} z-30 flex items-center gap-3 h-14 transition-all duration-300`}
       style={{
-        left: `${sidebarWidth}px`,
-        right: 0,
-        // On mobile give left padding to clear the sidebar hamburger button (w-9 at left-3 = 48px)
+        left: sticky ? undefined : `${sidebarWidth}px`,
+        right: sticky ? undefined : 0,
         paddingLeft: isMobile ? "52px" : "20px",
         paddingRight: "20px",
         background: "var(--color-bg-header)",
         borderBottom: "1px solid var(--color-border-subtle)",
         backdropFilter: "blur(8px)",
-        width: `calc(100% - ${sidebarWidth}px)`,
+        width: sticky ? "100%" : `calc(100% - ${sidebarWidth}px)`,
       }}
     >
       {/* Brand / breadcrumb — always visible */}

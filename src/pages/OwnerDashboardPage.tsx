@@ -378,6 +378,7 @@ const OwnerDashboardPage = () => {
   // "blinking" tab behavior).
   const movementLastVisibleRef = useRef<QueryDocumentSnapshot | null>(null);
   const transferLastVisibleRef = useRef<QueryDocumentSnapshot | null>(null);
+  const notificationLastVisibleRef = useRef<QueryDocumentSnapshot | null>(null);
 
   useEffect(() => {
     const tabParam = new URLSearchParams(location.search).get("tab");
@@ -785,7 +786,8 @@ const OwnerDashboardPage = () => {
     }
     
     try {
-      const lastDoc = loadMore ? notificationLastVisible : null;
+      // Use ref so this callback never re-creates when pagination cursor changes
+      const lastDoc = loadMore ? notificationLastVisibleRef.current : null;
       const result = await NotificationService.list(
         cid,
         notificationPageSize,
@@ -800,6 +802,8 @@ const OwnerDashboardPage = () => {
       }
 
       setNotificationHasMore(result.hasMore);
+      // Keep ref and state in sync
+      notificationLastVisibleRef.current = result.lastVisible;
       setNotificationLastVisible(result.lastVisible);
       setAllNotificationsLoaded(!result.hasMore);
     } catch (error) {
@@ -812,7 +816,9 @@ const OwnerDashboardPage = () => {
       }
       isLoadingRef.current = false;
     }
-  }, [companyId, notificationPageSize, notificationLastVisible]);
+  // notificationLastVisible intentionally excluded — read via ref to avoid infinite loop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, notificationPageSize]);
 
   // ============================================================
   // REFRESH ALL DATA FUNCTION
@@ -911,6 +917,7 @@ const OwnerDashboardPage = () => {
     if (oTab === "movements") loadMovements();
     if (oTab === "notifications") {
       setNotificationLastVisible(null);
+      notificationLastVisibleRef.current = null;
       setAllNotificationsLoaded(false);
       loadNotificationsList(companyId, false);
     }
@@ -2281,6 +2288,7 @@ const OwnerDashboardPage = () => {
                   <button
                     onClick={() => {
                       setNotificationLastVisible(null);
+                      notificationLastVisibleRef.current = null;
                       setAllNotificationsLoaded(false);
                       loadNotificationsList(companyId, false);
                     }}

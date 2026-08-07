@@ -29,6 +29,105 @@ export interface CreateProductInput {
 
 export const ProductService = {
 
+  /**
+   * Find an existing product matching name + categoryName (case-insensitive).
+   * Returns the first match or null.
+   */
+  async findByNameAndCategory(
+    companyId: string,
+    name: string,
+    categoryName: string,
+  ): Promise<Product | null> {
+    const snap = await getDocs(
+      query(
+        collection(db, "companies", companyId, "products"),
+        where("name", "==", name.trim()),
+        where("categoryName", "==", categoryName.trim()),
+      )
+    );
+    if (snap.empty) return null;
+    const d = snap.docs[0];
+    return { id: d.id, ...d.data() } as Product;
+  },
+
+  /**
+   * Create a new product OR merge the quantity into an existing one if a product
+   * with the same name and category already exists.
+   *
+   * Returns:
+   *   { product, merged: false }  — a brand-new product was created
+   *   { product, merged: true  }  — quantity was added to an existing product
+   */
+  async createOrMerge(
+    input: CreateProductInput,
+  ): Promise<{ product: Product; merged: boolean }> {
+    const existing = await ProductService.findByNameAndCategory(
+      input.companyId,
+      input.name,
+      input.categoryName,
+    );
+
+    if (!existing) {
+      const product = await ProductService.create(input);
+      return { product, merged: false };
+    }
+
+    // ── Duplicate found — merge the quantity ──
+    const newQty  = (existing.stockQuantity ?? 0) + input.stockQuantity;
+    const status  = newQty === 0 ? "out_of_stock"
+      : newQty <= 10 ? "low_stock" : "in_stock";
+
+    await updateDoc(
+      doc(db, "companies", input.companyId, "products", existing.id),
+      {
+        stockQuantity: newQty,
+        product_Qty:   newQty,
+        status,
+        updatedAt:     new Date(),
+      }
+    );
+
+    // Update inventory record for the target warehouse
+    const warehouseId   = input.warehouseId   ?? "main_warehouse";
+    const warehouseName = input.warehouseName ?? warehouseId;
+
+    await InventoryService.upsert({
+      companyId:    input.companyId,
+      productId:    existing.id,
+      productName:  existing.name,
+      warehouseId,
+      warehouseName,
+      quantity:     newQty,
+      reorderLevel: 10,
+    });
+
+    // Log stock movement for the added quantity
+    await StockMovementService.log({
+      companyId:     input.companyId,
+      createdBy:     input.createdBy,
+      productId:     existing.id,
+      productName:   existing.name,
+      sku:           existing.sku,
+      warehouseId,
+      type:          "stock_in",
+      quantity:      input.stockQuantity,
+      balanceBefore: existing.stockQuantity ?? 0,
+      balanceAfter:  newQty,
+      notes:         "Quantity merged from duplicate product upload",
+    });
+
+    const updated: Product = {
+      ...existing,
+      stockQuantity: newQty,
+      product_Qty:   newQty,
+      status,
+      updatedAt:     new Date(),
+    };
+
+    console.log(`🔀 [ProductService] Merged qty into existing product "${existing.name}" → new qty: ${newQty}`);
+    return { product: updated, merged: true };
+  },
+
   async create(input: CreateProductInput): Promise<Product> {
     const ref  = doc(collection(db, "companies", input.companyId, "products"));
     const status = input.stockQuantity === 0 ? "out_of_stock"

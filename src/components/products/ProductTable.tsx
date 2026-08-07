@@ -10,7 +10,6 @@ import {
   MdAdd,
   MdSearchOff,
   MdInventory,
-  MdShoppingCart,
 } from "react-icons/md";
 
 interface ProductTableProps {
@@ -102,47 +101,8 @@ const ProductTable = ({
         border: "1px solid var(--color-border-soft)",
       }}
     >
-      {/* Table Header with Multi-Sell Button */}
-      <div
-        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-        style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
-      >
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
-            Products
-          </h3>
-          <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
-            ({products.length} items)
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* ─── Multi-Sell Button ─── */}
-          {onMultiSell && canEdit && (
-            <button
-              onClick={onMultiSell}
-              className="flex items-center bg-white cursor-pointer gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-80"
-              style={{
-                color: "var(--color-brand-primary)",
-                border: "1px solid var(--color-border-brand)",
-              }}
-            >
-              <MdShoppingCart size={14} /> Multi-Sell
-            </button>
-          )}
-          {canEdit && (
-            <button
-              onClick={onAdd}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-80"
-              style={{ background: "var(--color-brand-primary)", color: "white" }}
-            >
-              <MdAdd size={14} /> Add Product
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Product Table */}
-      <div className="overflow-x-auto">
+      {/* Product Table — no internal header, page owns the toolbar */}
+      <div className="overflow-x-auto no-scrollbar">
         <table className="w-full text-xs">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>

@@ -1,7 +1,7 @@
 // src/components/dashboard/AddProductView.tsx
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useSelector, useDispatch } from "react-redux"; // ← ADD useDispatch
+import { useSelector } from "react-redux"; // ← removed useDispatch (no manual Redux dispatch needed)
 import imageCompression from "browser-image-compression";
 import { MdImage, MdSave, MdCloudUpload } from "react-icons/md";
 import { FiChevronRight, FiTag, FiPackage, FiShield, FiDollarSign } from "react-icons/fi";
@@ -15,7 +15,7 @@ import { WarehouseService } from "../../services/warehouse.service";
 import { uploadImageToCloudinary } from "../../services/cloudinary.service";
 import useRole from "../../hooks/useRole";
 import { Category, Warehouse } from "../../types";
-import { addProduct } from "../../features/stock/stockSlice"; // ← ADD THIS
+// stock slice actions no longer needed here — real-time listener handles Redux updates
 
 interface AddProductViewProps {
   onCancel: () => void;
@@ -66,7 +66,6 @@ const INPUT_STYLE = {
 
 const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) => {
   const currentUser = useAuth();
-  const dispatch = useDispatch(); // ← ADD THIS
   const { assignedWarehouseId, hasWarehouseScope } = useRole();
   const companyId = useSelector((s: RootState) => s.auth.user?.companyId ?? "");
   const { settings } = useCompanySettings(companyId);
@@ -272,8 +271,8 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
 
   setSaving(true);
   try {
-    // ─── Create product in Firestore ───
-    const newProduct = await ProductService.create({
+    // ─── Create or merge into existing product ───
+    const { merged } = await ProductService.createOrMerge({
       companyId,
       createdBy: currentUser?.uid ?? "",
       name: productName.trim(),
@@ -288,55 +287,14 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
       warehouseName: selectedWarehouse.name,
     });
 
-    // ─── Determine stock status based on quantity ───
-    const stockQty = Number(qty);
-    let status: "in_stock" | "low_stock" | "out_of_stock";
-    if (stockQty <= 0) {
-      status = "out_of_stock";
-    } else if (stockQty <= 10) {
-      status = "low_stock";
-    } else {
-      status = "in_stock";
-    }
+    console.log(`✅ [AddProductView] Product ${merged ? "merged" : "created"} in Firestore: ${productName.trim()}`);
+    // NOTE: No manual Redux dispatch here.
+    // The real-time productListener in App.tsx calls setStockData whenever
+    // Firestore changes — it will update the store automatically and correctly.
 
-    // ─── Build product data for Redux ───
-    const productData = {
-      id: newProduct.id,
-      name: productName.trim(),
-      product_name: productName.trim(),
-      price: Number(price),
-      product_Price: Number(price),
-      stockQuantity: stockQty,
-      product_Qty: stockQty,
-      categoryId: selectedCategory.id,
-      categoryName: selectedCategory.name,
-      status: status, // ← Now using the correct status
-      companyId: companyId,
-      createdBy: currentUser?.uid ?? "",
-      warehouseId: selectedWarehouse.id,
-      warehouseName: selectedWarehouse.name,
-      imageUrl: imgUrl ?? "",
-      size,
-      sku: `SKU-${Date.now().toString(36).toUpperCase()}`,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    // ─── Safely dispatch to Redux ───
-    try {
-      dispatch(addProduct(productData));
-      console.log(`✅ [AddProductView] Product dispatched to Redux: ${productName}`);
-    } catch (dispatchErr) {
-      console.warn("⚠️ [AddProductView] Redux dispatch failed, but product saved to Firestore:", dispatchErr);
-    }
-
-    // ─── Call onSaved to return to dashboard ───
+    // ─── Return to dashboard ───
     onSaved();
-
-    // ─── Call onRefresh if provided ───
-    if (onRefresh) {
-      onRefresh();
-    }
+    if (onRefresh) onRefresh();
   } catch (err) {
     setError((err as Error).message);
   } finally {
@@ -363,12 +321,12 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
 
       {/* ── Page header ── */}
       <div
-        className="flex items-center justify-between px-6 py-4 shrink-0"
+        className="flex items-center justify-between px-5 py-3 shrink-0"
         style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
       >
         {/* Breadcrumb */}
         <div>
-          <div className="flex items-center gap-1.5 text-xs mb-1" style={{ color: "var(--color-text-faint)" }}>
+          <div className="flex items-center gap-1.5 text-xs mb-0.5" style={{ color: "var(--color-text-faint)" }}>
             <span
               className="cursor-pointer transition-colors hover:underline"
               style={{ color: "var(--color-brand-primary-soft)" }}
@@ -380,14 +338,11 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
             <span style={{ color: "var(--color-text-muted)" }}>Add New Product</span>
           </div>
           <h1
-            className="text-xl font-extrabold tracking-tight"
+            className="text-base font-bold tracking-tight"
             style={{ color: "var(--color-text-primary)" }}
           >
             Add New Product
           </h1>
-          <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>
-            Fill in the product details below to add it to your inventory.
-          </p>
         </div>
 
         {/* Actions */}
@@ -424,10 +379,10 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
       </div>
 
       {/* ── Form body ── */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4">
         {error && (
           <div
-            className="mb-4 px-4 py-3 rounded-lg text-sm"
+            className="mb-3 px-4 py-2.5 rounded-lg text-sm"
             style={{
               background: "var(--color-danger-soft)",
               border: "1px solid var(--color-danger-border)",
@@ -440,33 +395,20 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
 
         {/* ── Main card ── */}
         <div
-          className="rounded-2xl p-6 mb-6"
+          className="rounded-xl p-4 mb-4"
           style={{
             background: "var(--color-surface-1)",
             border: "1px solid var(--color-border-soft)",
           }}
         >
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
             {/* ── LEFT: Product info ── */}
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-4">
               {/* Section label */}
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: "var(--color-nav-active-bg)", border: "1px solid var(--color-border-brand)" }}
-                >
-                  <FiPackage size={16} style={{ color: "var(--color-brand-primary-soft)" }} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
-                    Product Information
-                  </p>
-                  <p className="text-xs" style={{ color: "var(--color-text-faint)" }}>
-                    Basic details about the product.
-                  </p>
-                </div>
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--color-text-faint)" }}>
+                Product Information
+              </p>
 
               {/* Product Name */}
               <div>
@@ -655,22 +597,9 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
 
               {/* Additional details */}
               <div>
-                <div className="flex items-center gap-3 mb-3">
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: "var(--color-surface-3)", border: "1px solid var(--color-border-soft)" }}
-                  >
-                    <FiTag size={14} style={{ color: "var(--color-text-muted)" }} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
-                      Additional Details <span style={{ color: "var(--color-text-faint)", fontWeight: 400 }}>(Optional)</span>
-                    </p>
-                    <p className="text-xs" style={{ color: "var(--color-text-faint)" }}>
-                      Add more information about the product.
-                    </p>
-                  </div>
-                </div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-secondary)" }}>
+                  Additional Details <span style={{ color: "var(--color-text-faint)", fontWeight: 400 }}>(Optional)</span>
+                </label>
                 <div className="relative">
                   <span className="absolute left-3 top-3">
                     <FiTag size={13} style={{ color: "var(--color-input-icon)" }} />
@@ -697,27 +626,14 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
             </div>
 
             {/* ── RIGHT: Image upload ── */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: "var(--color-nav-active-bg)", border: "1px solid var(--color-border-brand)" }}
-                >
-                  <MdImage size={16} style={{ color: "var(--color-brand-primary-soft)" }} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
-                    Product Image
-                  </p>
-                  <p className="text-xs" style={{ color: "var(--color-text-faint)" }}>
-                    Upload a high-quality image of your product.
-                  </p>
-                </div>
-              </div>
+            <div className="flex flex-col gap-3">
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--color-text-faint)" }}>
+                Product Image
+              </p>
 
               {/* Drop zone */}
               <div
-                className="flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-10 px-6 cursor-pointer transition-all"
+                className="flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-6 px-5 cursor-pointer transition-all"
                 style={{ borderColor: "var(--color-border-brand)", background: "var(--color-surface-2)" }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={handleDrop}
@@ -726,15 +642,15 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
                 onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border-brand)")}
               >
                 <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+                  className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
                   style={{ background: "var(--color-nav-active-bg)" }}
                 >
-                  <MdCloudUpload size={32} style={{ color: "var(--color-brand-primary-soft)" }} />
+                  <MdCloudUpload size={24} style={{ color: "var(--color-brand-primary-soft)" }} />
                 </div>
-                <p className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                <p className="text-sm font-medium mb-0.5" style={{ color: "var(--color-text-secondary)" }}>
                   Drag &amp; drop your image here
                 </p>
-                <p className="text-xs mb-4" style={{ color: "var(--color-brand-primary-soft)" }}>
+                <p className="text-xs mb-3" style={{ color: "var(--color-brand-primary-soft)" }}>
                   or click to browse
                 </p>
 
@@ -818,24 +734,24 @@ const AddProductView = ({ onCancel, onSaved, onRefresh }: AddProductViewProps) =
         </div>
 
         {/* ── Tips row ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {TIPS.map(({ icon, iconBg, iconColor, title, desc }) => (
             <div
               key={title}
-              className="flex items-start gap-3 p-4 rounded-xl"
+              className="flex items-start gap-2.5 p-3 rounded-lg"
               style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border-soft)" }}
             >
               <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                 style={{ background: iconBg }}
               >
-                <span style={{ color: iconColor }}>{icon}</span>
+                <span style={{ color: iconColor, fontSize: "14px" }}>{icon}</span>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-text-primary)" }}>
                   {title}
                 </p>
-                <p className="text-xs leading-snug" style={{ color: "var(--color-text-muted)" }}>
+                <p className="text-[10px] leading-snug" style={{ color: "var(--color-text-muted)" }}>
                   {desc}
                 </p>
               </div>

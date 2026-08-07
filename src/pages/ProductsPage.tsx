@@ -286,7 +286,6 @@ const handleSell = (product: Product) => {
   };
 
   const canEdit = isOwner || isAdmin;
-  const sidebarWidth = isSidebarCollapsed ? 64 : 220;
   const handleToggleSidebar = () => dispatch(toggleSidebar());
 
   // ─── Get warehouse name for display ───
@@ -304,7 +303,8 @@ const handleSell = (product: Product) => {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--color-bg-app)" }}>
+    <div className="flex min-h-screen" style={{ background: "var(--color-bg-app)" }}>
+      {/* Sidebar */}
       <DashboardSidebar
         collapsed={isSidebarCollapsed}
         onToggleCollapse={handleToggleSidebar}
@@ -312,85 +312,41 @@ const handleSell = (product: Product) => {
         onAlertsClick={() => navigate("/dashboard?tab=notifications")}
       />
 
-      <DashboardHeader
-        onMenuClick={handleToggleSidebar}
-        isSidebarCollapsed={isSidebarCollapsed}
-        onNotificationClick={() => navigate("/dashboard?tab=notifications")}
-      />
+      {/* Right column — header + content stacked */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Sticky header — works correctly inside RootLayout's scroll container */}
+        <div className="sticky top-0 z-30">
+          <DashboardHeader
+            onMenuClick={handleToggleSidebar}
+            isSidebarCollapsed={isSidebarCollapsed}
+            onNotificationClick={() => navigate("/dashboard?tab=notifications")}
+          />
+        </div>
 
-      <main
-        className="transition-all duration-300 pt-14 min-h-screen"
-        style={{
-          marginLeft: `${sidebarWidth}px`,
-          width: `calc(100% - ${sidebarWidth}px)`,
-          background: "var(--color-bg-app)",
-        }}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-          {/* ── Page Header ── */}
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>
+        {/* Page content — no pt-14 needed, header is in flow */}
+        <main className="flex-1 px-4 sm:px-5 pt-3 pb-6" style={{ background: "var(--color-bg-app)" }}>
+
+          {/* ── Single compact toolbar row ── */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            {/* Title */}
+            <div className="mr-2">
+              <h1 className="text-base font-bold leading-none" style={{ color: "var(--color-text-primary)" }}>
                 Products
                 {previewWarehouseId && (
-                  <span className="text-lg font-normal ml-2" style={{ color: "var(--color-text-muted)" }}>
-                    in {warehouseDisplayName}
+                  <span className="text-xs font-normal ml-1.5" style={{ color: "var(--color-text-muted)" }}>
+                    — {warehouseDisplayName}
                   </span>
                 )}
               </h1>
-              <p className="text-sm mt-0.5" style={{ color: "var(--color-text-muted)" }}>
-                {previewWarehouseId
-                  ? `Showing products available in your assigned warehouse`
-                  : `Manage your product inventory across all warehouses`}
+              <p className="text-[10px] mt-0.5" style={{ color: "var(--color-text-faint)" }}>
+                {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""}
               </p>
             </div>
-            {canEdit && (
-              <div className="flex gap-2">
-                <button
-                  onClick={handleMultiSell}
-                  className="flex items-center bg-white gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-all hover:opacity-80"
-                  style={{ color: "var(--color-brand-primary)" }}
-                >
-                  <MdShoppingCart size={18} /> Multi-Sell
-                </button>
-                <button
-                  onClick={handleAddProduct}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-80"
-                  style={{ background: "var(--color-brand-primary)", color: "white" }}
-                >
-                  <MdAdd size={18} /> Add Product
-                </button>
-              </div>
-            )}
-          </div>
 
-          {/* ── Warehouse Scope Notice ── */}
-          {previewWarehouseId && (
-            <div
-              className="mb-4 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2"
-              style={{
-                background: "var(--color-info-soft)",
-                border: "1px solid var(--color-info-border)",
-              }}
-            >
-              <span style={{ color: "var(--color-info)" }}>🔒</span>
-              <span style={{ color: "var(--color-text-secondary)" }}>
-                You are viewing products for <strong style={{ color: "var(--color-text-primary)" }}>
-                  {warehouseDisplayName}
-                </strong>
-                {displayedProducts.length === 0 && " — No products found in this warehouse."}
-              </span>
-              {displayedProducts.length > 0 && (
-                <span className="ml-auto text-[10px]" style={{ color: "var(--color-text-faint)" }}>
-                  {displayedProducts.length} product{displayedProducts.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-          )}
+            {/* Search — flex-1 to take remaining space */}
+            <ProductSearchBar onSearch={handleSearch} className="flex-1 min-w-[180px]" />
 
-          {/* ── Search & Filters ── */}
-          <div className="flex flex-wrap items-center gap-3 mb-6">
-            <ProductSearchBar onSearch={handleSearch} className="flex-1 min-w-50" />
+            {/* Filters */}
             <ProductFilters
               categories={categories}
               selectedCategory={selectedCategory}
@@ -398,7 +354,46 @@ const handleSell = (product: Product) => {
               onCategoryChange={handleCategoryChange}
               onStatusChange={handleStatusChange}
             />
+
+            {/* Actions */}
+            {canEdit && (
+              <>
+                <button
+                  onClick={handleMultiSell}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all hover:opacity-80 shrink-0"
+                  style={{ background: "var(--color-surface-2)", color: "var(--color-brand-primary)", border: "1px solid var(--color-border-brand)" }}
+                >
+                  <MdShoppingCart size={14} /> Multi-Sell
+                </button>
+                <button
+                  onClick={handleAddProduct}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all hover:opacity-80 shrink-0"
+                  style={{ background: "var(--color-brand-primary)", color: "white" }}
+                >
+                  <MdAdd size={14} /> Add Product
+                </button>
+              </>
+            )}
           </div>
+
+          {/* ── Warehouse scope notice — only when scoped, compact inline bar ── */}
+          {previewWarehouseId && (
+            <div
+              className="mb-2 px-3 py-1.5 rounded-lg text-[11px] flex items-center gap-2"
+              style={{ background: "var(--color-info-soft)", border: "1px solid var(--color-info-border)" }}
+            >
+              <span style={{ color: "var(--color-info)" }}>🔒</span>
+              <span style={{ color: "var(--color-text-secondary)" }}>
+                Viewing <strong style={{ color: "var(--color-text-primary)" }}>{warehouseDisplayName}</strong>
+                {displayedProducts.length === 0 && " — No products found."}
+              </span>
+              {displayedProducts.length > 0 && (
+                <span className="ml-auto text-[10px]" style={{ color: "var(--color-text-faint)" }}>
+                  {displayedProducts.length} item{displayedProducts.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* ── Product Table ── */}
           <ProductTable
@@ -413,10 +408,10 @@ const handleSell = (product: Product) => {
             onAdd={handleAddProduct}
             warehouseName={previewWarehouseId || undefined}
           />
-        </div>
-      </main>
+        </main>
+      </div>
 
-      {/* ── Edit Modal ── */}
+      {/* ── Modals render outside the column layout ── */}
       {editProduct && (
         <StockStateEditor
           id={editProduct.id}

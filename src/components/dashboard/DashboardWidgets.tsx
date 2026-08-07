@@ -1001,9 +1001,9 @@ export const ProductsTable = ({
         </div>
       </div>
 
-      {/* Table with enhanced styling */}
-      <div className="overflow-x-hidden min-w-0">
-        <table className="w-full text-xs table-fixed">
+      {/* Table — horizontally scrollable on mobile, no visible scrollbar */}
+      <div className="overflow-x-auto no-scrollbar">
+        <table className="w-full text-xs" style={{ minWidth: "640px" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
               {["", "SKU", "Product Name", "Category", "Price", "Stock", "Status", "Actions"].map((h) => (
@@ -1057,7 +1057,7 @@ export const ProductsTable = ({
                           "📦"
                         }
                       </div>
-                      <span className="font-medium truncate max-w-[140px]" style={{ color: "var(--color-text-primary)" }}>
+                      <span className="font-medium truncate max-w-[180px]" style={{ color: "var(--color-text-primary)" }}>
                         {product.product_name}
                       </span>
                     </div>

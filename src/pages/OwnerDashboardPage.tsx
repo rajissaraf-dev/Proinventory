@@ -1679,8 +1679,8 @@ const OwnerDashboardPage = () => {
                           </div>
                         </div>
 
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs">
+                        <div className="overflow-x-auto no-scrollbar">
+                          <table className="w-full text-xs" style={{ minWidth: "520px" }}>
                             <thead>
                               <tr style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
                                 <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide text-[10px]"
@@ -1932,7 +1932,8 @@ const OwnerDashboardPage = () => {
               )}
 
               <Panel>
-                <table className="w-full text-xs">
+                <div className="overflow-x-auto no-scrollbar">
+                <table className="w-full text-xs" style={{ minWidth: "600px" }}>
                   <thead><tr style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
                     {["#", "From", "To", "Items", "Status", "Actions"].map(h => <TH key={h} h={h} />)}
                   </tr></thead>
@@ -2083,6 +2084,7 @@ const OwnerDashboardPage = () => {
                     )}
                   </tbody>
                 </table>
+                </div>
               </Panel>
             </div>
           )}
@@ -2134,8 +2136,8 @@ const OwnerDashboardPage = () => {
               </div>
 
               <Panel>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                <div className="overflow-x-auto no-scrollbar">
+                  <table className="w-full text-xs" style={{ minWidth: "700px" }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
                         {["Date", "Product", "SKU", "Warehouse", "Type", "Qty", "Before", "After", "Ref"].map(h => <TH key={h} h={h} />)}
